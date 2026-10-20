@@ -465,3 +465,54 @@ The evidence now covers three models and two families, a mechanism control (T1')
 2. Larger models: 4-bit Qwen3-14B / 32B.
 3. Gradual filtering (closer to the CacheBlend paper), with r = 30% and 50%, to find the recompute ratio that eliminates the effect.
 4. Commit the code and results; write a workshop paper with two threads, "skill KV packs: 13× faster + better rule-following" and "the same mechanism amplifies injection in agent tool-output reuse".
+
+## 17. W6 results: RAG-layout control (2026-10-20)
+
+Setup: classic RAG layout `[sys][user: "Documents:" doc1 doc2 doc3 "Question: q"][assistant]`, with 3 retrieved documents per prompt. The injected document sits at position 0, 1 or 2 (rotating); the other two are clean documents with different names. Everything else matches W3: 96 items × 2 sampling seeds × 3 models.
+
+Conditions:
+- **R1**: full prefill (reference).
+- **R3**: each chunk precomputed independently after the shared head, then spliced. This is what CacheBlend-style systems precompute; it only removes attention *between* documents.
+- **R3N**: chunks precomputed with no prelude at all.
+- **R3B15**: R3 plus CacheBlend-style 15% recompute.
+
+In this layout the documents come before the question, so even a full prefill never lets them attend to the question or the conversation. Reproduce with `scripts/w6_all.sh` and `scripts/summarize_w3.py --glob 'outputs/w6_*.jsonl'`; full tables in `outputs/w6_summary.md`.
+
+| model | R1 full prefill | R3 independent chunks | R3N standalone chunks | R3B15 | Δ R3 − R1 | Δ R3B15 − R1 |
+|---|---|---|---|---|---|---|
+| Qwen3-4B | 0.14 | 0.29 | 0.00 | 0.17 | +0.15 [0.08, 0.24] | +0.03 [−0.01, 0.09] |
+| Qwen3-8B | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| Llama-3.2-3B | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+
+Clean-document accuracy, which moves in the opposite direction from the agent layout:
+
+| model | R1 | R3 | R3N | R3B15 |
+|---|---|---|---|---|
+| Qwen3-4B | 1.00 | 0.83 | 0.79 | 0.92 |
+| Qwen3-8B | 1.00 | 0.79 | 0.79 | 0.96 |
+| Llama-3.2-3B | 0.98 | 0.73 | 0.77 | 0.81 |
+
+### Conclusions
+1. **In the RAG layout the amplification nearly disappears.**
+   - On Qwen3-8B and Llama-3.2-3B, every condition has 0% compliance.
+   - Only Qwen3-4B shows a small amplification (+0.15), and CacheBlend-style 15% recompute brings it back to within noise of full prefill (+0.03, CI includes 0).
+   - In the agent layout, the same three models showed +0.41 / +0.20 / +0.15, and the excess persisted after CacheBlend-style recompute (§16).
+2. **This strongly supports the W5 mechanism.** Precomputation is only dangerous when the reused segment should have attended to the conversation (tool output after the question). In RAG the documents never see the question even in a full prefill, so precomputing them changes what they encode very little.
+3. **The cost of precomputation in RAG is accuracy, not safety.** Losing cross-document attention drops clean QA accuracy to 0.73–0.83, and 15% recompute recovers most of it (0.81–0.96). This reproduces CacheBlend's motivation on Apple-silicon MLX.
+   - Standalone chunks with no prelude (R3N) have 0% injection compliance, but only because the model gets worse at reading the chunk at all (accuracy 0.76–0.79): **it is not a defense**.
+4. **The final scope of RQ7:**
+
+   | Reuse scenario | Injection amplification | CacheBlend-style 15% recompute |
+   |---|---|---|
+   | Classic RAG (documents before the question) | Small or none | Sufficient |
+   | **Agent tool output / documents loaded mid-conversation (after the question)** | **Significant (+0.15 to +0.41), on 3 models and 2 families** | **Not sufficient (removes 30–55%)** |
+
+   The externally reportable claim is: "reusing context-free KV for agent tool output significantly amplifies prompt injection, and the standard selective recompute does not remove it". **It must not be phrased as "CacheBlend RAG has an injection vulnerability"**; W6 directly contradicts that.
+5. **Disclosure judgement:** whether any production engine currently reuses context-free KV for *agent tool output* needs to be confirmed. The W5 research found no such path in SGLang today; LMCache's blending targets RAG. If no system does this today, this is better published as a design warning (a paper / a design note to maintainers) than run through a vulnerability-disclosure process. Adam decides.
+
+### Next
+1. Write a workshop paper with two threads:
+   - Skill KV packs: 13× faster loading and better rule-following (W1/W2).
+   - The same mechanism: context-free reuse of agent tool output amplifies injection, partial recompute is not enough, and RAG is not affected (W3–W6).
+2. Optional: test whether the effect persists at larger scale with 4-bit Qwen3-14B/32B.
+3. Optional: check whether LMCache / vLLM / SGLang already expose, or plan to expose, non-prefix reuse for tool output and multi-turn agents (this decides whether disclosure is needed).

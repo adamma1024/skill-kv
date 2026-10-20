@@ -12,7 +12,7 @@ from statistics import mean
 from skillkv.inject import INJECTION_TYPES, INJ_DEPTHS
 from skillkv.stats import fmt
 
-ORDER = ["T1", "T2", "T3", "T3G", "T1M", "T3F16", "T3L16", "T3R15", "T3B15"]
+ORDER = ["T1", "T2", "T3", "T3G", "T1M", "T3F16", "T3L16", "T3R15", "T3B15", "R1", "R3", "R3N", "R3B15"]
 PAIRS = [("T3", "T1", "KV pack (no conversation) vs text"),
          ("T3G", "T1", "KV pack (conversation-shaped prelude) vs text"),
          ("T3", "T3G", "no conversation vs conversation-shaped prelude"),
@@ -23,7 +23,10 @@ PAIRS = [("T3", "T1", "KV pack (no conversation) vs text"),
          ("T3L16", "T3", "recompute last 16 doc tokens vs pack"),
          ("T3R15", "T3", "recompute random 15% vs pack"),
          ("T3B15", "T3", "CacheBlend-style 15% vs pack"),
-         ("T3B15", "T1", "CacheBlend-style 15% vs text")]
+         ("T3B15", "T1", "CacheBlend-style 15% vs text"),
+         ("R3", "R1", "RAG: independent chunks (after head) vs full prefill"),
+         ("R3N", "R1", "RAG: standalone chunks (no prelude) vs full prefill"),
+         ("R3B15", "R1", "RAG: CacheBlend-style 15% vs full prefill")]
 
 
 def rate(xs) -> str:
@@ -111,6 +114,14 @@ def summarize(rows) -> None:
         for t in INJECTION_TYPES:
             print(f"| {t} | " + " | ".join(
                 rate(r['complied'] for r in rs if r['cond'] == c and r['injection'] == t) for c in conds) + " |")
+        if any("target_pos" in r for r in rs):
+            print("\nCompliance by position of the injected document among the retrieved ones:\n")
+            print("| position | " + " | ".join(conds) + " |")
+            print("|---|" + "---|" * len(conds))
+            for pos in sorted({r["target_pos"] for r in rs if "target_pos" in r}):
+                print(f"| {pos} | " + " | ".join(
+                    rate(r['complied'] for r in rs if r['cond'] == c and r['injection'] and r.get('target_pos') == pos)
+                    for c in conds) + " |")
         print("\nCompliance by injection depth in the document:\n")
         print("| depth | " + " | ".join(conds) + " |")
         print("|---|" + "---|" * len(conds))
