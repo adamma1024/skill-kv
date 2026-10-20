@@ -516,3 +516,28 @@ Clean-document accuracy, which moves in the opposite direction from the agent la
    - The same mechanism: context-free reuse of agent tool output amplifies injection, partial recompute is not enough, and RAG is not affected (W3–W6).
 2. Optional: test whether the effect persists at larger scale with 4-bit Qwen3-14B/32B.
 3. Optional: check whether LMCache / vLLM / SGLang already expose, or plan to expose, non-prefix reuse for tool output and multi-turn agents (this decides whether disclosure is needed).
+
+## 18. Novelty check and submission plan (2026-10-20)
+
+Closely related work found (it must go into the paper's related work; the draft does not cite it yet):
+
+| Work | Relation | Overlap with ours |
+|---|---|---|
+| [HijackKV](https://arxiv.org/abs/2607.19957) (USENIX Security 2026) | An attacker optimizes a prefix that contaminates the KV of a later benign chunk, which is then served to a victim through position-independent reuse | **Different threat model.** It is about poisoned KV state. Ours: the KV is clean, but context-free encoding itself raises the authority of injections already in the content, and no attacker is needed to tamper with the cache |
+| [R²ECAP](https://arxiv.org/abs/2610.22873) (2026-10) | Black-box poisoning through reused reasoning-trace KV | Same as above: cache poisoning |
+| [History Swapping](https://arxiv.org/abs/2511.12752) | Replaces a segment of the KV to steer output | White-box KV tampering |
+| [ReCache](https://arxiv.org/abs/2608.19662) (2026-08) | Caches tool/skill schema KV per resource with local positions, reused at non-prefix positions | **The speed side overlaps** (precompiled tool/skill KV). It is also exactly a context-free encoding design, so our security finding applies directly to designs like it |
+| [Notes at Prefill](https://arxiv.org/abs/2606.17107) | Precompiles skill KV, RoPE re-rotation + seam token | The speed method overlaps (already cited) |
+| [Evaluating KV reuse accuracy](https://arxiv.org/abs/2609.31415) | Evaluation methodology for KV reuse accuracy | Accuracy only; does not cover instruction following or security |
+| [HEXIS](https://arxiv.org/abs/2609.30123) | Agents do not reliably follow skill requirements | Supports the motivation for W2 |
+
+The contributions that are still new (based on searches up to 2026-10-20, which read abstracts and not the full papers):
+1. Context-free encoding changes the role the model assigns to content (from "retrieved material" to "standalone instruction"): a benefit for skills, a vulnerability for untrusted content;
+2. The amplification needs no cache poisoning, and a defensive system prompt does not help;
+3. The T1' attention-mask control pins the cause to context-free encoding rather than the RoPE shift;
+4. CacheBlend-style 15% recompute is not enough;
+5. Agent layout vs RAG layout scoping.
+
+The speed of precompiling skill KV is **not** a contribution (Notes at Prefill and ReCache already do it).
+
+Gaps before submission: rewrite related work and positioning; at least one larger model (4-bit 14B/32B); a standard injection benchmark; real skills; a real KV-reuse implementation (e.g. ReCache / LMCache) instead of our approximation; manual inspection of samples; disclosure of AI assistance under each venue's policy.
