@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+packs/
+logs/
+outputs/library_*/
+outputs/smoke_*
