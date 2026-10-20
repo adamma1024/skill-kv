@@ -5,3 +5,8 @@ packs/
 logs/
 outputs/library_*/
 outputs/smoke_*
+paper/*.aux
+paper/*.log
+paper/*.bbl
+paper/*.blg
+paper/*.out

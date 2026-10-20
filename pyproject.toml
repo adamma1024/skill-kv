@@ -7,6 +7,9 @@ dependencies = ["mlx-lm>=0.32.2", "numpy>=2.0"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
+paper = [
+    "matplotlib>=3.11.2",
+]
 
 [build-system]
 requires = ["hatchling"]

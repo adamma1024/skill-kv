@@ -13,3 +13,10 @@ uv run python scripts/summarize_w1.py > outputs/w1_summary.md
 ```
 
 `packs/` and `outputs/` are git-ignored. Packs are model-specific and large: about 112 KB per token for Qwen3-1.7B and 144 KB per token for Qwen3-4B (bf16).
+
+## Paper
+
+```bash
+uv run --group paper python paper/make_assets.py   # numbers.tex, tables/, figures/ from outputs/*.jsonl
+cd paper && tectonic -X compile main.tex           # -> paper/main.pdf
+```
