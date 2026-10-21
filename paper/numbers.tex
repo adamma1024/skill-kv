@@ -2,6 +2,28 @@
 \newcommand{\CleanAccMin}{1.00}
 \newcommand{\FracBlend}{0.20}
 \newcommand{\FracRandom}{0.15}
+\newcommand{\IaDEight}{+0.33 [0.27, 0.40]}
+\newcommand{\IaDFour}{+0.12 [0.06, 0.17]}
+\newcommand{\IaDFourteen}{+0.42 [0.35, 0.49]}
+\newcommand{\IaDLlama}{+0.00 [$-$0.03, 0.03]}
+\newcommand{\IaDMaskEight}{+0.08 [0.03, 0.12]}
+\newcommand{\IaDMaskFour}{+0.03 [$-$0.01, 0.06]}
+\newcommand{\IaDMaskFourteen}{+0.00 [$-$0.03, 0.03]}
+\newcommand{\IaDMaskLlama}{$-$0.05 [$-$0.08, $-$0.02]}
+\newcommand{\IaNattacks}{62}
+\newcommand{\IaNcases}{264}
+\newcommand{\IaResidEight}{+0.25 [0.19, 0.31]}
+\newcommand{\IaResidFour}{+0.10 [0.05, 0.16]}
+\newcommand{\IaResidFourteen}{+0.41 [0.34, 0.48]}
+\newcommand{\IaResidLlama}{$-$0.02 [$-$0.05, 0.00]}
+\newcommand{\IaToneEight}{0.48}
+\newcommand{\IaToneFour}{0.40}
+\newcommand{\IaToneFourteen}{0.44}
+\newcommand{\IaToneLlama}{0.04}
+\newcommand{\IaTthreeEight}{0.81}
+\newcommand{\IaTthreeFour}{0.52}
+\newcommand{\IaTthreeFourteen}{0.86}
+\newcommand{\IaTthreeLlama}{0.05}
 \newcommand{\InjDEight}{+0.20 [0.12, 0.28]}
 \newcommand{\InjDFour}{+0.41 [0.35, 0.47]}
 \newcommand{\InjDGEight}{+0.13 [0.07, 0.19]}
@@ -41,6 +63,18 @@
 \newcommand{\InjTthreeLlama}{0.18}
 \newcommand{\InjZeroUpper}{2.1}
 \newcommand{\MitigShareRange}{29--55}
+\newcommand{\NatAccToneEight}{0.89}
+\newcommand{\NatAccToneFour}{0.90}
+\newcommand{\NatAccToneFourteen}{0.86}
+\newcommand{\NatAccToneLlama}{0.78}
+\newcommand{\NatAccToneThirtyTwo}{0.91}
+\newcommand{\NatAccTthreeEight}{0.81}
+\newcommand{\NatAccTthreeFour}{0.74}
+\newcommand{\NatAccTthreeFourteen}{0.88}
+\newcommand{\NatAccTthreeLlama}{0.64}
+\newcommand{\NatAccTthreeThirtyTwo}{0.83}
+\newcommand{\NatNdocs}{48}
+\newcommand{\NatNinjected}{96}
 \newcommand{\PilotKBFour}{144}
 \newcommand{\PilotKLRange}{0.065--0.092}
 \newcommand{\PilotSpeedupFour}{13.4}
@@ -58,6 +92,46 @@
 \newcommand{\RagRthreeFour}{0.29}
 \newcommand{\RagRthreeNAccFour}{0.79}
 \newcommand{\RagRthreeNAccRange}{0.77--0.79}
+\newcommand{\ScaleNatDEight}{+0.10 [0.02, 0.18]}
+\newcommand{\ScaleNatDFour}{$-$0.01 [$-$0.07, 0.06]}
+\newcommand{\ScaleNatDFourteen}{+0.05 [0.01, 0.09]}
+\newcommand{\ScaleNatDLlama}{+0.40 [0.30, 0.49]}
+\newcommand{\ScaleNatDMaskEight}{$-$0.04 [$-$0.10, 0.01]}
+\newcommand{\ScaleNatDMaskFour}{$-$0.02 [$-$0.05, 0.01]}
+\newcommand{\ScaleNatDMaskFourteen}{$-$0.03 [$-$0.06, $-$0.01]}
+\newcommand{\ScaleNatDMaskLlama}{$-$0.05 [$-$0.10, $-$0.01]}
+\newcommand{\ScaleNatDMaskThirtyTwo}{+0.00 [$-$0.04, 0.04]}
+\newcommand{\ScaleNatDThirtyTwo}{+0.51 [0.42, 0.59]}
+\newcommand{\ScaleNatToneEight}{0.58}
+\newcommand{\ScaleNatToneFour}{0.95}
+\newcommand{\ScaleNatToneFourteen}{0.48}
+\newcommand{\ScaleNatToneLlama}{0.46}
+\newcommand{\ScaleNatToneThirtyTwo}{0.19}
+\newcommand{\ScaleNatTthreeEight}{0.68}
+\newcommand{\ScaleNatTthreeFour}{0.94}
+\newcommand{\ScaleNatTthreeFourteen}{0.53}
+\newcommand{\ScaleNatTthreeLlama}{0.86}
+\newcommand{\ScaleNatTthreeThirtyTwo}{0.70}
+\newcommand{\ScaleSynDEight}{+0.20 [0.12, 0.28]}
+\newcommand{\ScaleSynDFour}{+0.41 [0.35, 0.47]}
+\newcommand{\ScaleSynDFourteen}{+0.11 [0.05, 0.17]}
+\newcommand{\ScaleSynDLlama}{+0.15 [0.08, 0.22]}
+\newcommand{\ScaleSynDMaskEight}{$-$0.02 [$-$0.08, 0.03]}
+\newcommand{\ScaleSynDMaskFour}{+0.01 [$-$0.01, 0.04]}
+\newcommand{\ScaleSynDMaskFourteen}{+0.00 [$-$0.02, 0.02]}
+\newcommand{\ScaleSynDMaskLlama}{$-$0.07 [$-$0.12, $-$0.01]}
+\newcommand{\ScaleSynDMaskThirtyTwo}{+0.04 [$-$0.03, 0.10]}
+\newcommand{\ScaleSynDThirtyTwo}{+0.52 [0.41, 0.63]}
+\newcommand{\ScaleSynToneEight}{0.00}
+\newcommand{\ScaleSynToneFour}{0.11}
+\newcommand{\ScaleSynToneFourteen}{0.20}
+\newcommand{\ScaleSynToneLlama}{0.03}
+\newcommand{\ScaleSynToneThirtyTwo}{0.08}
+\newcommand{\ScaleSynTthreeEight}{0.20}
+\newcommand{\ScaleSynTthreeFour}{0.52}
+\newcommand{\ScaleSynTthreeFourteen}{0.31}
+\newcommand{\ScaleSynTthreeLlama}{0.18}
+\newcommand{\ScaleSynTthreeThirtyTwo}{0.60}
 \newcommand{\WoneFourCone}{0.02}
 \newcommand{\WoneFourCthree}{0.34}
 \newcommand{\WoneFourD}{+0.32 [0.18, 0.48]}

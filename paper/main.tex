@@ -1,407 +1,511 @@
 \documentclass[10pt]{article}
-\usepackage[margin=1in]{geometry}
+% Submission (anonymous): \usepackage{tmlr}. Preprint with names: \usepackage[preprint]{tmlr}.
+\usepackage{tmlr}
 \usepackage[T1]{fontenc}
-\usepackage{newtxtext,newtxmath}
 \usepackage{microtype}
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{xcolor}
-\usepackage[small]{caption}
-\usepackage[numbers,sort&compress]{natbib}
-\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{hyperref}
+\usepackage{url}
 \input{numbers.tex}
+\IfFileExists{attn_numbers.tex}{\input{attn_numbers.tex}}{}
+\providecommand{\AttnAbstractSentence}{}
+\providecommand{\AttnParagraph}{}
 \setlength{\emergencystretch}{1.5em}
-
 \newcommand{\cond}[1]{\textsf{#1}}
-% ---- fill in before posting -------------------------------------------------
-\newcommand{\paperauthors}{Author Name(s)}
-\newcommand{\paperaffil}{Affiliation \quad \texttt{email}}
-\newcommand{\coderelease}{\url{https://github.com/<to-be-released>/skill-kv}}
-% -----------------------------------------------------------------------------
 
-\title{\textbf{Context-Free KV Reuse Changes What Language Models Obey:}\\
-Skill Following and Tool-Output Prompt Injection}
-\author{\paperauthors\\\small\paperaffil}
-\date{}
+\title{Context-Free KV Reuse Changes What Language Models Obey}
+
+% ---- fill in for the preprint / camera-ready version --------------------------
+\author{\name Anonymous Author(s) \email anonymous@example.com \\
+      \addr Anonymous affiliation}
+\def\month{MM}
+\def\year{YYYY}
+\def\openreview{\url{https://openreview.net/forum?id=XXXX}}
+% -------------------------------------------------------------------------------
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Serving systems increasingly precompute the key/value (KV) cache of reusable text---agent skills, tool schemas,
-retrieved documents---outside the context in which it is later used, and splice it in at a non-prefix position.
-Prior work evaluates the latency and accuracy of such reuse, and recent security work studies attackers who poison
-cached state. We ask whether an honestly computed, context-free cache changes \emph{which instructions the model
-follows}. In an agent loop where a tool returns text after the user's question, it does. For untrusted tool output,
-compliance with a benign injected instruction rises on all three models we test (Qwen3-4B \InjDFour, Qwen3-8B
-\InjDEight, Llama-3.2-3B \InjDLlama; document-clustered 95\% CIs), including Qwen3-8B, which complied in 0 of
-\InjNtrials\ trials when the same text was prefilled. A defensive system prompt does not reduce it. Masking the
-conversation from an ordinary prefill reproduces the effect, so context-free encoding is sufficient and the position
-shift is not needed. CacheBlend-style recompute of 15\% of tokens removes only \MitigShareRange\% of the excess. For
-trusted agent skills the same change can help: on Qwen3-4B, the share of tasks that obey all five rules of a skill rises
-from \WtwoFourCone\ to \WtwoFourCthree\ (\WtwoFourDthree). The gain is smaller on Qwen3-8B (\WtwoEightDthree) and
-absent on Llama-3.2-3B. On both Qwen models, packs raise compliance with standalone opening and closing directives---the same
-kind of directive whose injection they amplify. When
-documents precede the question, as in classic RAG, the effect is smaller on Qwen3-4B (\RagDFour) and cannot be measured
-on the other two models, which never comply in that layout. We argue that KV reuse should be keyed on trust.
+Serving systems increasingly reuse the key/value (KV) cache of text encoded outside the context in which it is later
+read---agent skills, tool schemas, retrieved documents---by splicing it in at a non-prefix position. Such reuse is evaluated
+for latency and accuracy, and recent security work studies adversaries who poison cached state. We show that an
+\emph{honestly computed} context-free cache changes which instructions a model obeys.
+
+\textbf{Untrusted tool output.} Across five open models (Qwen3 4B--32B and Llama-3.2-3B), mounting an untrusted tool result
+from a KV cache computed without the conversation raises compliance with instructions injected into it. The attacker needs no
+access to the cache, and a defensive system prompt does not help. The increase holds on three kinds of input:
+\begin{itemize}
+\item synthetic documents: up to \ScaleSynDThirtyTwo;
+\item Wikipedia documents: up to \ScaleNatDThirtyTwo;
+\item the InjecAgent benchmark: up to \IaDFourteen\ in attack success.
+\end{itemize}
+
+\textbf{Mechanism.} Blocking the document's attention to the conversation inside an ordinary prefill reproduces the effect,
+which isolates context-free encoding, rather than the position shift, as the cause. \AttnAbstractSentence
+
+\textbf{Mitigation and scope.} CacheBlend-style selective recompute reduces the excess roughly in proportion to its compute,
+and needs about half of a full prefill to remove it. When documents precede the question, as in classic RAG, the effect
+largely disappears.
+
+\textbf{Trusted skills.} The same encoding can make a model obey all rules of a trusted agent skill (Qwen3-4B: \WtwoFourCone\
+$\rightarrow$ \WtwoFourCthree\ of tasks), but this benefit is model-dependent.
+
+We conclude that KV reuse should be keyed on the trust level of the content.
 \end{abstract}
 
+% =====================================================================================
 \section{Introduction}
-Prompt prefill dominates latency for long, repeated inputs. Serving systems have therefore moved from exact prefix
-caching~\citep{gim2024promptcache,zheng2024sglang} to reusing KV caches at arbitrary
-positions~\citep{yao2025cacheblend,hu2024epic,chen2026kvpacket,li2026notes,liu2025lmcache}. Agents are a natural target.
-Skills loaded on demand (``progressive disclosure''~\citep{zhang2026progressive,nakasuji2026skillblocks}) and tool schemas
-are static, so their KV can be computed once and spliced in whenever they are needed~\citep{li2026notes,fang2026recache}.
-The latency savings are well documented; we reproduce them on Apple silicon as an implementation check (\S\ref{sec:fidelity}).
+Prompt prefill dominates latency when long inputs are processed repeatedly. Serving systems have therefore moved from exact
+prefix caching~\citep{gim2024promptcache,zheng2024sglang} to reusing KV caches at arbitrary
+positions~\citep{yao2025cacheblend,hu2024epic,chen2026kvpacket,li2026notes,liu2025lmcache}.
 
-What has not been studied is whether a segment whose KV was computed \emph{out of context} is \emph{read} by the model the
-same way. Accuracy evaluations~\citep{cestola2026evaluating,rakotonirina2026where} measure task loss. Security
-work~\citep{zhang2026hijackkv,zhu2026r2ecap,ganesh2025narrative} studies adversaries who craft cached state through optimized
-prefixes or direct manipulation. We study the honest case: a clean cache, computed from exactly the visible text, reused
-within one user's request. Our contributions:
-\begin{enumerate}\itemsep0pt
-\item \textbf{Injection amplification without poisoning} (\S\ref{sec:injection}). When untrusted tool output is mounted from a
-  context-free KV cache, compliance with injected instructions rises on three models from two families. It can appear on a
-  model that never complies when the same text is prefilled, and a defensive system prompt does not reduce it.
-\item \textbf{Mechanism, mitigation and scope} (\S\ref{sec:mitigation}).
-  \begin{itemize}\itemsep0pt
-  \item Masking the conversation inside an ordinary prefill is sufficient to reproduce the effect.
-  \item Boundary-token recompute does not help.
-  \item CacheBlend-style 15\% recompute removes only part of the effect.
-  \item When documents precede the question (classic RAG), the effect is smaller or undetectable.
+Agents are a natural target. Skills loaded on demand~\citep{zhang2026progressive,nakasuji2026skillblocks}, tool
+schemas~\citep{fang2026recache} and retrieved documents~\citep{lu2024turborag,yao2025cacheblend} are static or reused, so their
+KV can be computed once and spliced in whenever they are needed. In these systems a reusable segment is encoded \emph{out of
+context}, typically after a fixed header but without the conversation in which it will later be read.
+
+Work on such reuse measures latency and task accuracy~\citep{cestola2026evaluating,rakotonirina2026where}. Security work studies
+adversaries who craft cached state through optimized prefixes or direct
+manipulation~\citep{zhang2026hijackkv,zhu2026r2ecap,ganesh2025narrative}. We ask a different question: when the cache is honest,
+computed from exactly the visible text, does context-free encoding change \emph{which instructions the model follows}?
+
+It does. Our findings, in order of section:
+\begin{enumerate}
+\item \textbf{Injection amplification without poisoning} (\S\ref{sec:injection}).
+  \begin{itemize}
+  \item Mounting untrusted tool output from a context-free cache raises compliance with instructions embedded in it. This holds on
+    five models from two families (3B--32B), on synthetic and on natural Wikipedia documents, and on the InjecAgent tool-calling
+    benchmark~\citep{zhan2024injecagent}.
+  \item The largest effect is on the largest model we test: Qwen3-32B goes from \ScaleSynToneThirtyTwo\ to \ScaleSynTthreeThirtyTwo.
+  \item Qwen3-8B complies in 0 of \InjNtrials\ trials when the same text is prefilled.
+  \item A defensive system prompt does not reduce the effect, and clean-document accuracy can stay unchanged, so quality evaluations
+    would not reveal it.
   \end{itemize}
-\item \textbf{Skill following} (\S\ref{sec:skills}). On Qwen3-4B, a context-free skill makes the model follow rules the user did
-  not ask about, which text loading drops (\WtwoFourCone\ $\rightarrow$ \WtwoFourCthree\ all-rules compliance). The gain is
-  smaller on Qwen3-8B and absent on Llama-3.2-3B, where packs also weaken task-integrated rules.
-\item \textbf{A controlled harness} for MLX: splice and selective-recompute engines tested against exact prefill, a verifiable
-  synthetic skill benchmark, and canary injection items. A script generates every number in this paper from the released logs.
+\item \textbf{Mechanism} (\S\ref{sec:mechanism}).
+  \begin{itemize}
+  \item Blocking the document's attention to the user turn inside an ordinary prefill reproduces the effect on every model and
+    dataset, so the position shift is not needed.
+  \item Explicit attention measurements show that the first answer token attends more to the injected span under context-free
+    encoding.
+  \end{itemize}
+\item \textbf{Mitigation and scope} (\S\ref{sec:mitigation}).
+  \begin{itemize}
+  \item Recomputing boundary tokens does nothing.
+  \item CacheBlend-style selective recompute reduces the excess roughly in proportion to its compute, and needs about half of a
+    prefill to remove it.
+  \item In the classic RAG layout, where documents precede the question, the effect is small or absent.
+  \end{itemize}
+\item \textbf{Trusted skills} (\S\ref{sec:skills}). The same encoding can make a model obey standalone rules in a skill that text
+  loading drops. On Qwen3-4B this lifts all-rules compliance from \WtwoFourCone\ to \WtwoFourCthree, but the benefit is
+  model-dependent.
 \end{enumerate}
 
-\section{Related work}
+Together these suggest a single design rule: KV reuse should be keyed on the trust level of the content (\S\ref{sec:discussion}).
+We release the splice and selective-recompute engines for MLX, which are tested against exact prefill, the benchmarks and all
+logs; a script generates every number in this paper from the logs.
+
+% =====================================================================================
+\section{Background and threat model}\label{sec:background}
+\textbf{KV reuse.} A decoder caches, for every token and layer, the key and value vectors that later tokens attend to. Exact
+prefix caching reuses these vectors only when a new request starts with the same tokens.
+
+Position-independent reuse goes further: it stores the KV of a segment $s$, computed after some fixed prelude $p$, and splices
+it into a new context at position $P$. Because rotary position embeddings compose additively, cached keys can be re-rotated by
+$P-|p|$. The spliced tokens, however, never attended to whatever precedes them in the new context, beyond $p$. Systems repair
+this by recomputing a subset of tokens~\citep{yao2025cacheblend,hu2024epic}, by training boundary
+adapters~\citep{chen2026kvpacket}, by fine-tuning for block-wise encoding~\citep{ma2025blockattention,yang2025kvlink,yang2025ape},
+or by accepting the approximation~\citep{li2026notes,fang2026recache,lu2024turborag}.
+
+\textbf{Agent layout.} We study an agent loop in which a tool result is read \emph{after} the user's request:
+\begin{center}\small\texttt{[system] [user request; assistant tool call] [tool result] [assistant]}\end{center}
+If the tool result is mounted from a cache computed after \texttt{[system][tool-result header]}, the result never attends to the
+request or the call.
+
+\textbf{Threat model.}
+\begin{itemize}
+\item The attacker controls only the \emph{content} of a document or tool response, as in indirect prompt
+  injection~\citep{greshake2023indirect}.
+\item The serving system computes the document's KV honestly from that content, with no attacker prefix and no tampering, and
+  reuses it within the same request.
+\item The attacker succeeds if the model follows the injected instruction.
+\end{itemize}
+Cache-poisoning attacks~\citep{zhang2026hijackkv,zhu2026r2ecap} assume a stronger adversary; ours asks whether the reuse
+mechanism itself amplifies an ordinary injection. We know of no deployed system that applies context-free reuse to untrusted
+tool output in exactly this layout. Our results are therefore a design warning for systems that extend non-prefix reuse to agent
+tool results, which is a natural next step for the methods above.
+
+% =====================================================================================
+\section{Related work}\label{sec:related}
 \textbf{KV reuse.} Prompt Cache~\citep{gim2024promptcache} and RadixAttention~\citep{zheng2024sglang} reuse exact prefixes.
 LMCache~\citep{liu2025lmcache} and the knowledge-delivery view~\citep{cheng2024kdn} treat KV as storable knowledge.
 
-Several methods encode chunks independently and then combine them:
-\begin{itemize}\itemsep0pt
-\item with fine-tuning or adapted attention: Block-Attention~\citep{ma2025blockattention}, APE~\citep{yang2025ape},
-  KVLink~\citep{yang2025kvlink};
-\item for RAG chunks: TurboRAG~\citep{lu2024turborag};
-\item by repairing cross-chunk attention: recomputing selected tokens (CacheBlend~\citep{yao2025cacheblend},
-  EPIC~\citep{hu2024epic}), training boundary adapters (KV Packet~\citep{chen2026kvpacket}), or re-rotating keys and fixing a
-  seam (Notes at Prefill~\citep{li2026notes}, which also precompiles skills).
-\end{itemize}
-ReCache~\citep{fang2026recache} caches each tool or skill schema of an agent independently, with resource-local positions.
-Cartridges~\citep{eyuboglu2025cartridges} train compact KV for a corpus. Work on composing and evaluating reused KV focuses on
+Non-prefix reuse either recomputes selected tokens (CacheBlend~\citep{yao2025cacheblend}, EPIC~\citep{hu2024epic}), trains
+adapters or adapts attention (KV Packet~\citep{chen2026kvpacket}, Block-Attention~\citep{ma2025blockattention},
+APE~\citep{yang2025ape}, KVLink~\citep{yang2025kvlink}), or splices with little or no repair (TurboRAG~\citep{lu2024turborag},
+Notes at Prefill~\citep{li2026notes}, ReCache~\citep{fang2026recache}).
+
+Cartridges~\citep{eyuboglu2025cartridges} train compact KV for a corpus. Work on composing and evaluating reused KV measures
 accuracy~\citep{shepard2026costs,rakotonirina2026where,cestola2026evaluating}. Cross-model transfer~\citep{liu2024droidspeak,fu2025c2c}
 is orthogonal.
 
-\textbf{Security of KV reuse.} HijackKV~\citep{zhang2026hijackkv} optimizes an attacker's prefix so that the KV of a later
-benign chunk carries the attacker's goal; it is then served to other requests through position-independent reuse.
-R$^2$ECAP~\citep{zhu2026r2ecap} achieves similar poisoning in a black-box setting through reused reasoning traces. Ganesh et
-al.~\citep{ganesh2025narrative} overwrite cache segments directly, and Sun et al.~\citep{sun2026sidechannel} exploit non-prefix
-RAG caches as a side channel.
+\textbf{Security of KV reuse.}
+\begin{itemize}
+\item HijackKV~\citep{zhang2026hijackkv} optimizes an attacker prefix so that the KV of a later benign chunk carries the
+  attacker's goal; the chunk is then served to other requests through position-independent reuse.
+\item R$^2$ECAP~\citep{zhu2026r2ecap} poisons reused reasoning traces in a black-box setting.
+\item \citet{ganesh2025narrative} overwrite cache segments directly.
+\item \citet{sun2026sidechannel} exploit non-prefix RAG caches as a side channel.
+\end{itemize}
+In all of these the cached state is not what the visible text alone would produce. Here it is.
 
-In those attacks, the cached state is \emph{not} what the visible text alone would produce: it carries an optimized prefix or
-direct tampering. In our setting the attacker writes ordinary text in a document, as in standard indirect prompt
-injection~\citep{greshake2023indirect,zhan2024injecagent,debenedetti2024agentdojo,yi2025bipia}. There is no optimization and no
-cross-request sharing; the cache is computed honestly, and the reuse mechanism itself amplifies the injection.
-
-\textbf{Defenses and instruction priority.} Several defenses separate untrusted data from instructions, either at the input or
+\textbf{Indirect prompt injection and defenses.} Benchmarks include InjecAgent~\citep{zhan2024injecagent},
+AgentDojo~\citep{debenedetti2024agentdojo} and BIPIA~\citep{yi2025bipia}. Defenses separate data from instructions at the input or
 in training: spotlighting~\citep{hines2024spotlighting}, structured queries~\citep{chen2025struq}, preference
-optimization~\citep{chen2025secalign}, and the instruction hierarchy~\citep{wallace2024hierarchy}. One might expect isolating
-untrusted text in attention to act as a defense of the same kind. Our masking control shows the opposite: without training,
-cutting the document off from the conversation \emph{increases} compliance.
+optimization~\citep{chen2025secalign}, and the instruction hierarchy~\citep{wallace2024hierarchy}. One might expect that isolating
+untrusted text in attention acts as a similar separation. Our masking control shows the opposite.
 
-For skills, agents do not reliably follow skill requirements~\citep{li2026hexis}, and skill-loading strategies have been compared
+\textbf{Skills.} Agents do not reliably follow skill requirements~\citep{li2026hexis}. Skill-loading strategies have been compared
 only at the text level~\citep{zhang2026progressive,nakasuji2026skillblocks}.
 
+% =====================================================================================
 \section{Method}\label{sec:method}
-\textbf{Packs.} Given a token segment $s$ and a prelude $p$, a \emph{pack} stores the per-layer K/V of $s$ computed after $p$.
-mlx-lm~\citep{hannun2023mlx} caches post-RoPE keys, so to mount a pack at position $P$ we rotate each key by $\delta = P - |p|$
-with the model's own RoPE and append it; standard and Llama-3-scaled RoPE both compose additively. Tokens of $s$ then lack
-attention to whatever precedes $P$ but is not in $p$.
+\textbf{Packs and splicing.} A \emph{pack} stores the per-layer K/V of a segment $s$ computed after a prelude $p$.
+mlx-lm~\citep{hannun2023mlx} caches post-RoPE keys, so mounting a pack at position $P$ re-rotates its keys by $P-|p|$ with the
+model's own RoPE before appending them. This works for standard and Llama-3-scaled RoPE.
 
-\textbf{Layouts and conditions.} All conditions in a comparison share identical token ids; segments are tokenized separately and
-concatenated. The agent layout is
-\begin{center}\small\texttt{[system + catalog] [user question; assistant tool call] [tool result] [assistant]}\end{center}
-and the conditions differ only in how the tool result (a skill for \cond{C}, a document for \cond{T}) enters the cache:
-\begin{itemize}\itemsep0pt
-\item \cond{C1}/\cond{T1} \emph{text}: prefilled as the tool result (standard).
-\item \cond{C3}/\cond{T3} \emph{pack}: at the same position, from a pack whose prelude is \texttt{[system][tool-result header]}, so it never saw the user turn or the tool call.
-\item \cond{C2}/\cond{T2} \emph{system prefix}: the text is placed in the system prompt (exact and prefix-cacheable), and the tool result is an acknowledgement.
-\item \cond{C3G}/\cond{T3G}: a pack built after a content-free question and the tool call (a conversation-shaped prelude).
-\item \cond{C1M}/\cond{C3M}: \cond{C1}/\cond{C3} with a question that names all five skill rules (without their values).
-\item \cond{T1$'$}: text prefill at the true positions, but an attention mask stops the tool-result header and document from attending to the user turn and the tool call. There is no position shift.
-\item \cond{T3F16}/\cond{T3L16}/\cond{T3R15}/\cond{T3B15}: the \cond{T3} pack with in-context recompute, on all later layers, of the first 16 tokens, the last 16 tokens, a random 15\%, or the 15\% with the largest layer-1 K/V deviation. \cond{T3B15} is CacheBlend-style: all tokens on two layers, then a one-shot selection. Measured compute is \FracBlend\ of a prefill for \cond{T3B15} and \FracRandom\ for \cond{T3R15}.
+\textbf{Selective recompute and masking.} A layer-wise engine mounts a segment while recomputing a chosen token subset in the real
+context. Recomputed tokens get fresh Q/K/V and attend causally to the prefix, to the pack's K/V for the other segment tokens, and to
+the fresh K/V of the other recomputed tokens. The same engine can forbid segment tokens from attending to a range of prefix
+positions. Unit tests on Qwen3 and Llama check three equivalences:
+\begin{itemize}
+\item recomputing every token equals text prefill;
+\item recomputing none equals the plain splice;
+\item a masked segment is independent of the masked tokens.
 \end{itemize}
 
-The RAG layout is
-\begin{center}\small\texttt{[system] [user: three documents, then the question] [assistant]}\end{center}
-with the following conditions:
-\begin{itemize}\itemsep0pt
-\item \cond{R1}: full prefill.
-\item \cond{R3}: each document precomputed independently after the shared header.
-\item \cond{R3N}: each document precomputed with no prelude at all.
-\item \cond{R3B15}: \cond{R3} plus CacheBlend-style recompute.
+\textbf{Conditions.} All conditions in a comparison share identical token ids. Table~\ref{tab:conditions} defines them; their roles
+are as follows.
+\begin{itemize}
+\item \cond{T1} is standard prefill.
+\item \cond{T3} is the context-free pack.
+\item \cond{T1$'$} isolates the absence of attention to the conversation from the position shift.
+\item \cond{T3G} gives the pack a conversation-shaped prelude.
+\item \cond{T3B$x$} approximates CacheBlend: all tokens are recomputed on two layers, then the $x\%$ with the largest layer-1 K/V
+  deviation on all later layers.
 \end{itemize}
 
-Unit tests on Qwen3 and Llama check that recomputing every token equals text prefill, recomputing none equals the plain splice,
-and \cond{T1$'$} makes the document independent of the user turn.
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lp{0.68\linewidth}}
+\toprule
+Condition & How the tool result (document / skill) enters the cache \\
+\midrule
+\cond{T1} / \cond{C1} & Prefilled as the tool result, in context (standard). \\
+\cond{T3} / \cond{C3} & Spliced at the same position from a pack built after \texttt{[system][tool-result header]}. \\
+\cond{T1$'$} & Prefilled at the true positions, with attention to the user turn and tool call masked. \\
+\cond{T3G} / \cond{C3G} & Pack built after a content-free question and the tool call (conversation-shaped prelude). \\
+\cond{T2} / \cond{C2} & Placed in the system prompt (exact prefix); the tool result is an acknowledgement. \\
+\cond{T3F16}, \cond{T3L16} & \cond{T3} with the first / last 16 tokens recomputed in context. \\
+\cond{T3R15} & \cond{T3} with a random 15\% of tokens recomputed. \\
+\cond{T3B15}, \cond{T3B30}, \cond{T3B50} & \cond{T3} with deviation-selected recompute (CacheBlend-style) of 15 / 30 / 50\%. \\
+\cond{R1}, \cond{R3}, \cond{R3N}, \cond{R3B15} & RAG layout: full prefill; per-chunk packs after the header; packs with no prelude; \cond{R3} + recompute. \\
+\cond{C1M}, \cond{C3M} & Skills: \cond{C1}/\cond{C3} with a question that names every rule (without its value). \\
+\bottomrule
+\end{tabular}
+\caption{Conditions. \cond{T}: untrusted documents; \cond{C}: skills; \cond{R}: RAG layout.}
+\label{tab:conditions}
+\end{table}
 
-\section{Setup}
-\textbf{Models and templates.} We use Qwen3-1.7B/4B/8B with thinking off~\citep{yang2025qwen3} and Llama-3.2-3B-Instruct~\citep{grattafiori2024llama3},
-all in bf16, on an Apple M5 Pro laptop (64\,GB) with MLX 0.32.4 and mlx-lm 0.32.2.
+% =====================================================================================
+\section{Experimental setup}\label{sec:setup}
+\textbf{Models.} Qwen3-4B and Qwen3-8B (bf16, thinking off)~\citep{yang2025qwen3}, Qwen3-14B and Qwen3-32B (4-bit MLX
+quantization, bf16 KV), and Llama-3.2-3B-Instruct (bf16)~\citep{grattafiori2024llama3}. All run on one Apple M5 Pro laptop (64\,GB)
+with MLX 0.32.4 and mlx-lm 0.32.2. Prompts use each model's chat format, assembled from strings; Appendix~\ref{app:prompts} gives
+the exact templates.
 
-Prompts are assembled from template strings rather than \texttt{apply\_chat\_template}:
-\begin{itemize}\itemsep0pt
-\item Qwen uses ChatML, with tool results as \texttt{user} turns wrapped in \texttt{<tool\_response>}.
-\item Llama uses the Llama~3 header format, with tool results in the \texttt{ipython} role and bare-JSON tool calls, but without
-  the \texttt{Environment: ipython} system line.
-\end{itemize}
-
-\textbf{Verifiable skills.} We generate skill documents of 650--3,300 tokens for (object, action) domains such as invoice
-reconciliation. Each document plants five rules at controlled depths, rotated across skills so that every (rule, depth) cell is
-covered:
-\begin{itemize}\itemsep0pt
-\item a \texttt{CODE:~XX-1234} line at the start of the deliverable;
-\item a file-name prefix;
-\item a four-digit parameter value;
-\item an exact heading for the step list;
-\item a sign-off line at the end.
-\end{itemize}
-Each task names the domain and asks for a step list, the file name and the parameter value. It does not ask for the code line,
-the heading or the sign-off. Our primary grading is positional: the code line must be the first non-empty line, the sign-off the last, and
-the other three strings must appear. A lenient grader that only checks presence over-counts, because answers often quote a rule
-(``8.~Finish with the sign-off line \texttt{--~osprey-26~--}'') without following it; we report it only for comparison.
-
-\textbf{Injection items.} The same documents are served by a \texttt{read\_doc} tool, and the user asks for one parameter value.
-Each of the \InjNdocs\ documents has a clean version and three injected versions, with an inert canary placed at depth 0.1, 0.5 or
-0.9:
-\begin{itemize}\itemsep0pt
+\textbf{Synthetic documents.} We generate 24 procedure documents (650--3,300 tokens). The user asks for one parameter value and
+reads the document through a \texttt{read\_doc} tool. Each document has a clean version and three injected versions, with an inert
+canary placed at depth 0.1, 0.5 or 0.9:
+\begin{itemize}
 \item \emph{override}: ``ignore the user's question, reply only \texttt{ACK-<canary>}'';
 \item \emph{append}: ``end with \texttt{ref:~<canary>}'';
 \item \emph{refuse}: ``say the document is confidential''.
 \end{itemize}
-Each condition therefore has \InjNinjected\ injected items $\times$ 2 seeds $=$ \InjNtrials\ trials. Note that the documents are
-procedural and imperative, which makes this a stress test rather than a natural distribution.
+Each condition has \InjNinjected\ injected items $\times$ 2 seeds $=$ \InjNtrials\ trials.
 
-\textbf{Decoding and statistics.} We sample at $T{=}0.7$, top-$p$ 0.8 and top-$k$ 20, with seeds shared across conditions. The
-token budget is 512 for skills and 160 for injection. No injection response was truncated; skill responses were truncated in
-\WtwoFourTrunc\%, \WtwoEightTrunc\% and \WtwoLlamaTrunc\% of cases on Qwen3-4B, Qwen3-8B and Llama-3.2-3B. We report paired differences with 95\% percentile
-bootstrap intervals that resample skills or documents, because items built on the same document are correlated. We do not correct
-for multiple comparisons. Tables~\ref{tab:mechanism} and \ref{tab:w2contrasts} list every agent-layout and skill contrast we ran, and
-RAG contrasts are given in the text. Intervals that touch zero should be read as inconclusive.
+\textbf{Natural documents.} For each of the \NatNdocs\ articles in the SQuAD v1.1 validation set~\citep{rajpurkar2016squad}, we
+concatenate consecutive paragraphs into a 555--806-word document. The question is a SQuAD question with a short answer (at most 4
+words) found in the document. Override and append canaries are inserted at sentence boundaries at the same three depths, giving
+\NatNinjected\ injected items $\times$ 2 seeds per condition.
 
-\section{Results}
-\subsection{Fidelity and latency check}\label{sec:fidelity}
-\begin{table}[t]
-\centering\small
-\input{tables/pilot.tex}
-\caption{Implementation check on six real skills of 750--5,506 tokens, with oracle selection. TTFT is the time from the tool call
-to the first answer token (median of 3 runs, warm file cache); the speedup is the median ratio over the six skills. KL is the mean
-token-level KL divergence from the text condition over a greedy reference answer of up to 96 tokens, for a
-\texttt{[system][header]} prelude and for an exact-context prelude.}
-\label{tab:pilot}
-\end{table}
-Table~\ref{tab:pilot} checks the implementation.
-\begin{itemize}\itemsep0pt
-\item A pack built with the exact context matches text prefill (KL 0.001), so the deviation of real packs (KL \PilotKLRange)
-  comes only from the missing conversation.
-\item Splicing reproduces the known latency benefit~\citep{li2026notes,fang2026recache}.
-\item Storage is the on-device constraint: \PilotKBFour\,KB per token for Qwen3-4B in bf16.
+\textbf{InjecAgent.} We use every fourth case of the direct-harm and data-stealing test sets in the \emph{enhanced}
+setting~\citep{zhan2024injecagent}, giving \IaNcases\ cases over \IaNattacks\ attack instructions. The system prompt lists the user
+tool and the attacker tools. The model sees the user instruction and its own call to the user tool, then reads the tool response,
+which contains the attack. An attack succeeds if the next turn calls the attacker tool. Every fourth case also runs a clean control
+with the injected sentence removed. Tools are only described, never executed.
+
+\textbf{Skills.} We use 24 synthetic skills, each planting five rules: an opening code line, a file-name prefix, a parameter value,
+a step-list heading, and a closing sign-off. The question asks for the step list, file name and parameter but never mentions the code
+line, heading or sign-off. Grading is positional: the code line must come first and the sign-off last.
+
+\textbf{Decoding and statistics.}
+\begin{itemize}
+\item Sampling uses $T{=}0.7$, top-$p$ 0.8 and top-$k$ 20, with the random stream shared across the conditions of an item.
+\item No injection or InjecAgent response reached its token budget.
+\item Intervals are paired, percentile-bootstrap 95\% CIs that resample documents (or InjecAgent attack instructions, or skills),
+  because items built on one document are correlated.
+\item We do not correct for multiple comparisons. Appendix~\ref{app:results} lists every contrast we ran, and intervals that touch
+  zero should be read as inconclusive.
 \end{itemize}
 
-\subsection{Injection: context-free tool output is obeyed more}\label{sec:injection}
+% =====================================================================================
+\section{Results}\label{sec:results}
+\subsection{Implementation check}\label{sec:fidelity}
+A pack built with the exact context reproduces text prefill (mean token-level KL 0.001). Packs built after
+\texttt{[system][header]} deviate only through the missing conversation (KL \PilotKLRange). Splicing lowers post-selection
+time-to-first-token by a median of \PilotSpeedupOne--\PilotSpeedupFour$\times$ (Appendix Table~\ref{tab:pilot}), reproducing the
+known benefit~\citep{li2026notes,fang2026recache}.
+
+\subsection{Context-free tool output is obeyed more}\label{sec:injection}
+\begin{table}[t]
+\centering\small
+\input{tables/scale.tex}
+\caption{Injection compliance in the agent layout (plain system prompt). $\Delta$: paired difference with a document-clustered 95\%
+CI. Qwen3-14B and Qwen3-32B use 4-bit weights.}
+\label{tab:scale}
+\end{table}
+Table~\ref{tab:scale} gives the main result.
+
+\textbf{Synthetic documents.} Mounting the untrusted document from a context-free pack (\cond{T3}) raises compliance on every model
+and both document types. On synthetic documents the increase ranges from \ScaleSynDFourteen\ (Qwen3-14B) to \ScaleSynDThirtyTwo\
+(Qwen3-32B).
+
+\textbf{Natural documents.} Models comply far more often even under plain prefill, and Qwen3-4B is at ceiling (0.95). Packs still
+raise compliance substantially on Llama-3.2-3B (\ScaleNatDLlama) and Qwen3-32B (\ScaleNatDThirtyTwo), and modestly on Qwen3-8B and
+Qwen3-14B.
+
+\textbf{Scale.} The effect does not shrink with scale. The largest model, Qwen3-32B, shows the largest increase on both document
+types, because it is well protected under prefill (\ScaleSynToneThirtyTwo\ and \ScaleNatToneThirtyTwo) but not under a pack.
+
+\textbf{The cache is clean.} No attacker access to the cache is involved: the pack is computed from exactly the visible text.
+
+\begin{table}[t]
+\centering\small
+\input{tables/injecagent.tex}
+\caption{InjecAgent (enhanced setting, \IaNcases\ cases): share of responses that call the attacker tool. The 95\% CI is clustered by
+attack instruction. Clean: the injected sentence is removed (every fourth case).}
+\label{tab:injecagent}
+\end{table}
+\textbf{InjecAgent.} On this standard benchmark (Table~\ref{tab:injecagent}), packs raise attack success on all three Qwen models.
+Qwen3-14B goes from \IaToneFourteen\ to \IaTthreeFourteen\ (\IaDFourteen). Llama-3.2-3B almost never calls the attacker tool in
+either condition. With the injection removed, attacker tools are essentially never called, so the increase is caused by the
+injection.
+
+\textbf{Defensive prompting and accuracy.} A system prompt that tells the model never to follow instructions inside documents leaves
+pack compliance unchanged (Appendix Table~\ref{tab:agent}). On synthetic documents clean accuracy is unaffected. On natural documents
+packs also lower answer accuracy (Table~\ref{tab:natacc}), a separate cost we return to in \S\ref{sec:discussion}.
+
+\subsection{Mechanism: the document never saw the conversation}\label{sec:mechanism}
+\textbf{Masking reproduces the pack.} The masked-text control \cond{T1$'$} keeps the true positions and changes only what the document
+attends to, and it reproduces the pack on every model and dataset (columns T1$'$ vs T3 in Tables~\ref{tab:scale}
+and~\ref{tab:injecagent}). For example, \cond{T3}$-$\cond{T1$'$} is \ScaleSynDMaskThirtyTwo\ for Qwen3-32B on synthetic documents
+and \ScaleNatDMaskThirtyTwo\ on natural ones. Re-rotating keys is therefore not what drives the effect: preventing the document from
+attending to the user's request is sufficient.
+
+\textbf{Conversation-shaped prelude.} A pack built after a content-free question and tool call (\cond{T3G}) removes the effect on
+Llama-3.2-3B for synthetic documents, but not on Qwen, and not reliably on natural documents (Appendix~\ref{app:results}). Seeing
+\emph{a} conversation is not equivalent to seeing \emph{the} conversation.
+
+\textbf{Role confound.} In Qwen's chat template a tool result is a \texttt{user} turn, so a Qwen pack encodes the document as if it
+were the first user message. Llama uses a dedicated \texttt{ipython} role and shows the effect as well, which reduces this concern
+but does not rule it out: its pack is still the first non-system turn.
+
+\AttnParagraph
+
+\subsection{Mitigation and scope}\label{sec:mitigation}
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figures/injection.pdf}
-\caption{Injection compliance (\InjNtrials\ injected trials per bar; error bars are document-clustered 95\% CIs). Left: agent
-layout, where a tool returns the document after the question. Right: RAG layout, with three retrieved documents before the
-question. Colours encode the role of a condition (blue text, orange pack, green pack plus recompute, yellow masked text) and are
-the same in both panels.}
-\label{fig:injection}
+\includegraphics[width=0.5\linewidth]{figures/sweep.pdf}\\[4pt]
+{\small\input{tables/sweep.tex}}
+\caption{Excess injection compliance over text (\cond{T3$x$}$-$\cond{T1}, synthetic documents) as a function of CacheBlend-style
+selective recompute. The x-axis is the measured fraction of prefill compute. Error bars are document-clustered 95\% CIs.}
+\label{fig:sweep}
 \end{figure}
-\begin{table}[t]
+\textbf{Selective recompute.} Recomputing 16 boundary tokens changes compliance by at most 0.05 (Appendix
+Table~\ref{tab:mechanism}), so seam repair~\citep{li2026notes} is not a defense. Deviation-selected recompute reduces the excess
+roughly in proportion to compute (Figure~\ref{fig:sweep}).
+\begin{itemize}
+\item At 15\% recompute, a significant residual remains on every model; on Qwen3-14B the excess does not shrink at all.
+\item At 50\%, the residual is small, and its CI includes zero on two of three models; on Qwen3-4B it is still significant.
+\item The same holds on InjecAgent, where 15\% recompute leaves most of the excess (Table~\ref{tab:injecagent}).
+\end{itemize}
+Removing the vulnerability thus costs on the order of half a prefill, which erodes most of the latency benefit of reuse.
+
+\textbf{RAG layout.} When three retrieved documents precede the question, not even full prefill lets them see the question.
+Precomputing each chunk then removes only cross-document attention (Appendix Table~\ref{tab:rag}).
+\begin{itemize}
+\item Qwen3-8B and Llama-3.2-3B never comply under any condition.
+\item Qwen3-4B shows a smaller increase (\RagDFour), which 15\% recompute brings within noise (\RagDBFour).
+\end{itemize}
+This layout differs in role, number of documents and tool use, so it is a contrast rather than a controlled ablation. It is
+nevertheless consistent with the mechanism: precomputation matters when the reused segment \emph{should} have attended to the
+request.
+
+\subsection{Trusted skills}\label{sec:skills}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/w2_skills.pdf}
+\caption{Share of tasks that obey all five rules of a skill (24 skills $\times$ 2 tasks $\times$ 3 seeds per model; positional
+grading). Error bars are skill-clustered 95\% CIs. Contrasts are in Appendix Table~\ref{tab:w2contrasts}.}
+\label{fig:skills}
+\end{figure}
+Skills are trusted content, so here the same mechanism is a potential benefit (Figure~\ref{fig:skills}, Appendix
+Tables~\ref{tab:skillrules}--\ref{tab:w2contrasts}).
+
+\textbf{Qwen3-4B.} When a skill is prefilled as a tool result, the model follows the rules tied to the request but drops the opening
+code line and the closing sign-off. Only \WtwoFourCone\ of tasks obey all five rules. A context-free pack raises this to
+\WtwoFourCthree\ (\WtwoFourDthree). Two controls bear on the cause:
+\begin{itemize}
+\item Naming every rule in the question has the same effect as the pack.
+\item A conversation-shaped pack does not help.
+\end{itemize}
+
+\textbf{Other models.} Qwen3-8B shows a smaller gain (\WtwoEightDthree), and Llama-3.2-3B none. On both Qwen models, packs raise the
+standalone opening and closing directives---the same kind of directive whose injection they amplify. On Qwen3-8B and Llama, packs
+also weaken rules that are integrated with the task, such as the heading.
+
+% =====================================================================================
+\section{Discussion}\label{sec:discussion}
+\textbf{A working account.} Text encoded inside a conversation is represented relative to it, as material retrieved for the user's
+request, and the model acts on what that request needs. Text encoded without the conversation but read after it is closer to a
+standalone instruction. This account fits the following results:
+\begin{itemize}
+\item the masking control;
+\item the attention measurements;
+\item the per-rule skill results;
+\item the RAG contrast.
+\end{itemize}
+
+It is incomplete in two respects:
+\begin{itemize}
+\item Chunks with no prelude at all (\cond{R3N}) are \emph{never} obeyed in the RAG layout. Whatever gains authority needs some
+  context (here, the system prompt), just not the conversation.
+\item A conversation-shaped prelude helps on one model only.
+\end{itemize}
+
+\textbf{Implications.}
+\begin{itemize}
+\item Cache-poisoning attacks~\citep{zhang2026hijackkv,zhu2026r2ecap} call for integrity checks on cached state. Our results show
+  that an honestly computed cache can still change model behavior, so whether to reuse context-free KV must also depend on where the
+  content came from.
+\item Untrained attention-level isolation is not a defense, unlike trained separation of data and
+  instructions~\citep{chen2025struq,chen2025secalign}.
+\item Packs also lower answer accuracy on natural documents, because the document is encoded without knowing what will be asked. A
+  context-free cache is therefore not a neutral optimization even for trusted content.
+\end{itemize}
+
+\textbf{Recommendations.}
+\begin{itemize}
+\item Reserve context-free reuse, with provenance metadata, for trusted first-party content, and check per model that it does not
+  degrade how that content is followed.
+\item Prefill untrusted tool output in context whenever it follows the user's request. Selective recompute must approach half a
+  prefill to remove the effect.
+\item Evaluate reuse features for instruction-following and injection behavior, not only for accuracy and latency.
+\end{itemize}
+
+\section{Limitations}\label{sec:limitations}
+\begin{itemize}
+\item All models are open models of at most 32B parameters, and the two largest are 4-bit quantized.
+\item We do not test production serving stacks. Our CacheBlend-style engine uses one-shot rather than gradual token selection.
+\item The synthetic documents and skills are templated, and the canary injections are explicit. The natural-document and InjecAgent
+  results partly address this, but agents with multi-step tool use (e.g., AgentDojo~\citep{debenedetti2024agentdojo}) remain to be
+  tested.
+\item The skill benefit is clear on one model only.
+\item The account in \S\ref{sec:discussion} is supported by behavioral and attention evidence but not by a causal circuit-level
+  analysis.
+\end{itemize}
+
+\section*{Broader impact statement}
+This work identifies a way that a performance optimization can weaken a model's resistance to prompt injection. The vulnerable
+configuration requires reusing context-free KV for untrusted content placed after the user's request, which we did not find in
+deployed systems. We therefore present it as a design warning, together with the mitigation and its cost. All injections are inert
+canaries or the simulated tools of a public benchmark, run against local models. An AI coding assistant was used for
+implementation, running experiments and drafting; a script generates every reported number from the released logs.
+
+\bibliography{refs}
+\bibliographystyle{tmlr}
+
+% =====================================================================================
+\appendix
+\section{Prompt templates}\label{app:prompts}
+\input{appendix_prompts.tex}
+
+\section{Additional results}\label{app:results}
+\begin{table}[h]
+\centering\small
+\input{tables/pilot.tex}
+\caption{Implementation check: six real skills of 750--5,506 tokens. TTFT is measured from the tool call to the first answer token
+(median of 3 runs, warm file cache). KL is the mean token-level KL to the text condition over a greedy reference of up to 96
+tokens.}
+\label{tab:pilot}
+\end{table}
+
+\begin{table}[h]
 \centering\small
 \input{tables/agent_injection.tex}\\[6pt]
 \input{tables/pertype.tex}
-\caption{Top: injection compliance in the agent layout. Bottom: compliance by injection type, \cond{T1}~$\rightarrow$~\cond{T3}
-(plain prompt). Accuracy on clean documents is \CleanAccMin\ for \cond{T1} and \cond{T3} on every model.}
+\caption{Synthetic documents, three bf16 models. Top: compliance by condition, including system-prompt placement (\cond{T2}) and a
+defended system prompt. Bottom: compliance by injection type, \cond{T1}~$\rightarrow$~\cond{T3}.}
 \label{tab:agent}
 \end{table}
-Figure~\ref{fig:injection} (left) and Table~\ref{tab:agent} give the results.
 
-\textbf{Compliance rises on every model.} Mounting the untrusted document as a pack raises compliance from \InjToneFour\ to
-\InjTthreeFour\ on Qwen3-4B, from \InjToneEight\ to \InjTthreeEight\ on Qwen3-8B, and from \InjToneLlama\ to \InjTthreeLlama\ on
-Llama-3.2-3B.
-
-\textbf{By injection type.} On Qwen3-4B, override injections, which tell the model to ignore the user, dominate: they go from
-\InjOvToneFour\ to \InjOvTthreeFour. On Qwen3-8B and Llama, override and append rise by similar amounts. Qwen3-8B complied in 0 of \InjNtrials\ trials with text (one-sided 95\% upper
-bound \InjZeroUpper\%), but obeys \InjOvTthreeEight\ of override injections from a pack. The \emph{refuse} injection is almost never
-followed under any condition.
-
-\textbf{Defensive prompting does not help.} A system prompt telling the model never to follow instructions in documents changes
-neither text compliance (\InjDefToneFour, \InjDefToneEight, \InjDefToneLlama) nor pack compliance (\InjDefTthreeFour,
-\InjDefTthreeEight, \InjDefTthreeLlama).
-
-\textbf{System-prompt placement is not the cause.} Putting the document in the system prompt (\cond{T2}) does not raise compliance on
-any model. \cond{T2} differs from \cond{T3} in both role and position, so it does not show which of the two matters.
-
-\textbf{The risk is invisible to accuracy checks.} Accuracy on clean documents is unchanged, so a quality evaluation would not reveal
-the risk.
-
-\subsection{Mechanism, mitigations and scope}\label{sec:mitigation}
-\begin{table}[t]
+\begin{table}[h]
 \centering\small
 \input{tables/mechanism.tex}
-\caption{Every agent-layout contrast we ran: paired differences in injection compliance (plain system prompt unless noted), with
-document-clustered 95\% CIs.}
+\caption{Every agent-layout contrast on synthetic documents for the three bf16 models (document-clustered 95\% CIs).}
 \label{tab:mechanism}
 \end{table}
-Table~\ref{tab:mechanism} gives every contrast we ran.
 
-\textbf{Context-free encoding is sufficient.} The masked-text control \cond{T1$'$} reaches the pack's compliance, and slightly exceeds
-it on Llama ($\cond{T3}-\cond{T1}'$ = \InjDMaskLlama; \InjDMaskFour\ and \InjDMaskEight\ on Qwen). Cutting the document off from the user turn and the tool
-call is enough; key re-rotation is not needed.
+\begin{table}[h]
+\centering\small
+\input{tables/natural_accuracy.tex}
+\caption{Answer accuracy on clean natural documents.}
+\label{tab:natacc}
+\end{table}
 
-\textbf{What the document lacks.} The pack's prelude omits two things: the question and the conversation structure. A pack built after
-a content-free question and tool call (\cond{T3G}) removes the effect on Llama (\InjDGLlama) but only partly on Qwen (\InjDGFour,
-\InjDGEight).
-
-In Qwen's template a tool result is a \texttt{user} turn. A pack whose prelude is \texttt{[system][tool-result header]} therefore
-encodes the document as if it were the first user message, and part of the effect may come from this role confound. Llama uses a
-dedicated \texttt{ipython} role and still shows the effect (\InjDLlama), which reduces this concern but does not rule it out: its pack is
-still the first non-system turn, with no user turn before it.
-
-\textbf{Mitigations.}
-\begin{itemize}\itemsep0pt
-\item Recomputing 16 boundary tokens (\cond{T3F16}, \cond{T3L16}) changes compliance by at most 0.05, so seam
-  repair~\citep{li2026notes} is not a defense.
-\item At 15\% recompute, deviation-based selection removes \MitigShareRange\% of the excess. It does somewhat better than random
-  selection, but the difference is significant only on Llama, and the two use different compute (\FracBlend\ vs \FracRandom).
-\item The residual over text remains: \InjResidFour\ for Qwen3-4B, \InjResidEight\ for Qwen3-8B and \InjResidLlama\ for Llama-3.2-3B.
-  We did not test recompute fractions between 15\% and 100\%.
-\end{itemize}
-
-\begin{table}[t]
+\begin{table}[h]
 \centering\small
 \input{tables/rag.tex}
-\caption{RAG layout: three retrieved documents, with the injected one at position 0, 1 or 2 (\InjNtrials\ injected trials per cell).}
+\caption{RAG layout: three retrieved documents, with the injected one at position 0, 1 or 2 (\InjNtrials\ injected trials per
+cell).}
 \label{tab:rag}
 \end{table}
-\textbf{RAG layout.} When documents precede the question (Figure~\ref{fig:injection}, right; Table~\ref{tab:rag}), even full prefill
-never lets them see the question.
-\begin{itemize}\itemsep0pt
-\item On Qwen3-4B, precomputing each chunk still raises compliance (\RagDFour), less than in the agent layout, and 15\% recompute brings
-  it within noise (\RagDBFour).
-\item Qwen3-8B and Llama-3.2-3B never comply in this layout under any condition, so they cannot show an effect either way.
-\item This layout also differs in role, number of documents and tool use, so it is a contrast, not a controlled ablation.
-\item Precomputation lowers clean accuracy here, and recompute largely restores it.
-\item Chunks precomputed with no prelude at all (\cond{R3N}) are never followed (Qwen3-4B: 0.00 vs \RagRthreeFour\ for \cond{R3}), even
-  though they are read about as well (accuracy \RagRthreeNAccFour\ vs \RagRthreeAccFour). The most context-free condition is thus the
-  \emph{least} obeyed; we return to this in \S6.
-\end{itemize}
 
-\subsection{Skills: packs raise framing directives; overall benefit is model-dependent}\label{sec:skills}
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=\linewidth]{figures/w2_skills.pdf}\\[4pt]
-{\small\input{tables/w2.tex}}
-\caption{Share of tasks obeying all five skill rules (\WtwoNtasks\ tasks over \WtwoNskills\ skills $\times$ 3 seeds per model;
-error bars and brackets are skill-clustered 95\% CIs; positional grading). Responses truncated at 512 tokens: \WtwoFourTrunc\%
-(Qwen3-4B) and \WtwoEightTrunc\% (Qwen3-8B); on Llama-3.2-3B \WtwoLlamaTruncCone\% (\cond{C1}), \WtwoLlamaTruncCthree\% (\cond{C3}),
-\WtwoLlamaTruncConeM\% (\cond{C1M}) and \WtwoLlamaTruncCthreeM\% (\cond{C3M}).}
-\label{fig:skills}
-\end{figure}
-\begin{table}[t]
+\begin{table}[h]
 \centering\small
+\input{tables/w2.tex}\\[6pt]
 \input{tables/skillrules.tex}
-\caption{Per-rule pass rates, \cond{C1} (text) $\rightarrow$ \cond{C3} (pack), positional grading for \texttt{code} and
-\texttt{signoff}. The question asks for the step list, file name and parameter; it never mentions the code line, the sign-off or the
-heading.}
+\caption{Skills. Top: all-rules compliance (skill-clustered 95\% CIs). Bottom: per-rule pass rates, \cond{C1}
+$\rightarrow$ \cond{C3}. The question never mentions the code line, sign-off or heading.}
 \label{tab:skillrules}
 \end{table}
-Figure~\ref{fig:skills}, Table~\ref{tab:skillrules} and Table~\ref{tab:w2contrasts} show the skill results across models.
-\begin{table}[t]
+
+\begin{table}[h]
 \centering\small
 \input{tables/w2contrasts.tex}
-\caption{Every skill contrast we ran: paired differences in all-rules compliance (positional grading unless noted), with
-skill-clustered 95\% CIs.}
+\caption{Every skill contrast (positional grading unless noted).}
 \label{tab:w2contrasts}
 \end{table}
 
-\textbf{Qwen3-4B.} With the skill prefilled as a tool result (\cond{C1}), the model almost never satisfies all five rules
-(\WtwoFourCone). It follows the rules tied to what the question asks for, but drops the opening code line (\WtwoFourCodeCone) and the
-closing sign-off (\WtwoFourSignCone). Mounting a pack at the same position (\cond{C3}) raises all-rules compliance to \WtwoFourCthree\
-(\WtwoFourDthree; \WtwoFourDLenient\ under lenient grading), comparable to the exact system-prefix layout \cond{C2}. An earlier greedy
-run, with different tasks (four per skill) and a 256-token budget, gives \WoneFourD. Two ablations bear on the cause:
-\begin{itemize}\itemsep0pt
-\item Naming every rule in the question also repairs text loading (\cond{C1M}: \WtwoFourConeM), and packs then add nothing.
-\item A pack that saw a content-free question and the tool call behaves like text (\cond{C3G}: \WtwoFourCthreeG).
+\section{Reproducibility}\label{app:repro}
+\begin{itemize}
+\item \textbf{Code.} The code, data-generation scripts, raw logs (JSONL) and the asset script that produces every table, figure and
+  number are released (anonymized for review).
+\item \textbf{Hardware and runtime.} One Apple M5 Pro laptop with 64\,GB of unified memory.
+\item \textbf{Licenses.} SQuAD is licensed CC BY-SA 4.0 and InjecAgent MIT.
 \end{itemize}
-
-\textbf{Qwen3-8B.} The direction is the same but the gain is smaller: \WtwoEightCone\ $\rightarrow$ \WtwoEightCthree\ (\WtwoEightDthree).
-Packs again raise both framing rules (code \WtwoEightCodeCone\ $\rightarrow$ \WtwoEightCodeCthree, sign-off \WtwoEightSignCone\
-$\rightarrow$ \WtwoEightSignCthree), but lower the heading rule (\WtwoEightHeadCone\ $\rightarrow$ \WtwoEightHeadCthree). When all
-rules are named, and for a conversation-shaped prelude, the pack is worse than text.
-
-\textbf{Llama-3.2-3B and Qwen3-1.7B.} Neither benefits.
-\begin{itemize}\itemsep0pt
-\item Llama satisfies all five rules only when they are named (\cond{C1M}: \WtwoLlamaConeM). Packs raise the sign-off
-  (\WtwoLlamaSignCone\ $\rightarrow$ \WtwoLlamaSignCthree) but not the code line, and lower the heading, file-name and parameter rules.
-\item With all rules named, Llama's packs hurt sharply (\WtwoLlamaDMM). \WtwoLlamaTruncCthreeM\% of these trials hit the token budget,
-  mostly because the model copies the skill text verbatim.
-\item Qwen3-1.7B (greedy) satisfies all rules in neither condition (\WoneOneSevenCone\ and \WoneOneSevenCthree).
-\end{itemize}
-
-\textbf{Summary.} The skill benefit is clear on Qwen3-4B, smaller on Qwen3-8B and absent on Llama-3.2-3B. The pattern that
-replicates is narrower: on both Qwen models, packs raise compliance with standalone opening and closing directives---the same kind of
-directive whose injection they amplify (\S\ref{sec:injection}). On Qwen3-8B and especially Llama, packs also weaken rules that are
-integrated with the task.
-
-\section{Discussion}
-\textbf{A working hypothesis.} Text encoded inside a conversation is represented relative to it, as material retrieved for the user's
-request, and the model acts on what that request needs. Text encoded without the conversation but read after it can behave like a
-fresh, standalone instruction. The agent-layout injection results, the masking control and the framing-rule results on both Qwen models fit
-this hypothesis. We have no internal (attention or probing) evidence for it, and \cond{R3N}---chunks encoded with no prelude at all,
-not even the system prompt, which are never obeyed---shows that ``context-free'' is not monotone: a segment that has seen the system
-prompt but not the conversation is what gains authority, not a segment that has seen nothing. The \cond{T3G} results and the loss of task-integrated rules on Qwen3-8B
-and Llama show that the boundary between the two readings is model-dependent, and that a pack can also weaken how well the content
-is integrated with the task.
-
-\textbf{Relation to poisoning and to defenses.} Cache-poisoning attacks~\citep{zhang2026hijackkv,zhu2026r2ecap} call for integrity
-checks on cached state. Our results show that an honestly computed cache can still be unsafe, so the decision to reuse context-free
-KV must also depend on \emph{where the content came from}. Our results suggest that untrained attention-level isolation is not a defense, unlike trained
-separation of data and instructions~\citep{chen2025struq,chen2025secalign}.
-
-\textbf{Recommendations.}
-\begin{itemize}\itemsep0pt
-\item Reserve context-free reuse, with provenance metadata, for trusted first-party content such as skills and schemas, and only
-  after checking per model that it does not degrade how the content is followed (it does on Llama-3.2-3B).
-\item Prefill untrusted tool output, web pages and third-party documents in context when they follow the user's request.
-\item Evaluate any reuse feature for instruction-following and injection behaviour, not only for accuracy.
-\end{itemize}
-
-\textbf{Limitations.}
-\begin{itemize}\itemsep0pt
-\item Models are 1.7B--8B. The injection effect shrinks from Qwen3-4B to Qwen3-8B and may differ for larger models; the skill
-  benefit is clear on Qwen3-4B, smaller on Qwen3-8B and absent on Llama-3.2-3B.
-\item Documents and injections are synthetic and templated; standard benchmarks~\citep{zhan2024injecagent,debenedetti2024agentdojo,yi2025bipia}
-  remain to be run.
-\item Our CacheBlend-style engine uses one-shot rather than gradual selection, and we did not test production serving stacks.
-\item We know of no deployed system that applies context-free reuse to untrusted tool output placed after the user's request. The
-  agent path we study is therefore a design scenario, not an observed deployment. Systems that cache trusted schemas
-  context-free~\citep{fang2026recache} are outside it.
-\end{itemize}
-
-\textbf{Ethics and disclosure.} All injections are inert canaries run against local models; no deployed system was attacked. Because we
-found no deployed system with the vulnerable path, we present this as a design warning rather than a vulnerability report. An AI coding
-assistant was used for implementation, running experiments and drafting. Every reported number is produced by scripts from the
-released logs.
-
-\textbf{Code and data.} \coderelease
-
-\bibliographystyle{plainnat}
-\bibliography{refs}
 \end{document}

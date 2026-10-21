@@ -395,6 +395,179 @@ def injection():
     plt.close(fig)
 
 
+# ---------------------------------------------------------------- round 1: scale, natural docs, recompute sweep
+ALL_MODELS = MODELS + [("mlx-community/Qwen3-14B-4bit", "Qwen3-14B (4-bit)", "Fourteen"),
+                       ("mlx-community/Qwen3-32B-4bit", "Qwen3-32B (4-bit)", "ThirtyTwo")]
+
+
+def scale_natural():
+    syn = [r for r in load("w5_*.jsonl") + load("w8_*.jsonl") if not r["defended"]]
+    nat = load("w7_*.jsonl")
+    cl = lambda r: (r["tag"], r["doc"])  # noqa: E731
+    key = lambda r: (r["tag"], r["item"], r["seed"])  # noqa: E731
+
+    def inj(rows, mid):
+        return [r for r in rows if r["model"] == mid and r["injection"]]
+
+    def rate(rows, cond, field="complied"):
+        xs = [float(r[field]) for r in rows if r["cond"] == cond]
+        return mean(xs) if xs else None
+
+    # main table: both document types, five models
+    lines = [r"\begin{tabular}{l" + "rrrr" * 2 + "}", r"\toprule",
+             r"& \multicolumn{4}{c}{Synthetic procedure documents} & \multicolumn{4}{c}{Natural documents (Wikipedia)} \\",
+             r"\cmidrule(lr){2-5}\cmidrule(lr){6-9}",
+             r"Model & T1 & T1$'$ & T3 & $\Delta$ T3$-$T1 & T1 & T1$'$ & T3 & $\Delta$ T3$-$T1 \\", r"\midrule"]
+    for mid, label, tag in ALL_MODELS:
+        cells = []
+        for rows, kind in ((syn, "Syn"), (nat, "Nat")):
+            rs = inj(rows, mid)
+            cells += [f"{rate(rs, c):.2f}" for c in ("T1", "T1M", "T3")]
+            d = fmt_ci(paired(rs, "T3", "T1", key, "complied", cl), signed=True)
+            cells.append(d)
+            m(f"Scale{kind}D{tag}", d)
+            m(f"Scale{kind}Tone{tag}", f"{rate(rs, 'T1'):.2f}")
+            m(f"Scale{kind}Tthree{tag}", f"{rate(rs, 'T3'):.2f}")
+            m(f"Scale{kind}DMask{tag}", fmt_ci(paired(rs, "T3", "T1M", key, "complied", cl), signed=True))
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("scale", lines)
+
+    # natural-document accuracy cost (clean items)
+    lines = [r"\begin{tabular}{lrrrr}", r"\toprule", r"Model & T1 & T1$'$ & T3 & T3B15 \\", r"\midrule"]
+    for mid, label, tag in ALL_MODELS:
+        rs = [r for r in nat if r["model"] == mid and not r["injection"]]
+        cells = [(f"{rate(rs, c, 'correct'):.2f}" if rate(rs, c, "correct") is not None else "--") for c in ("T1", "T1M", "T3", "T3B15")]
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+        m(f"NatAccTone{tag}", f"{rate(rs, 'T1', 'correct'):.2f}")
+        m(f"NatAccTthree{tag}", f"{rate(rs, 'T3', 'correct'):.2f}")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("natural_accuracy", lines)
+    m("NatNdocs", str(len({r["doc"] for r in nat})))
+    m("NatNinjected", str(len({(r["tag"], r["item"]) for r in nat if r["injection"]
+                                and r["model"] == MODELS[0][0]})))
+
+    # recompute dose-response (synthetic documents)
+    fig, ax = plt.subplots(figsize=(3.3, 2.2))
+    style(ax)
+    sweep = [("T3", 0.0), ("T3B15", None), ("T3B30", None), ("T3B50", None)]
+    lines = [r"\begin{tabular}{lrrrr}", r"\toprule",
+             r"Model & 0\% (T3) & 15\% & 30\% & 50\% \\", r"\midrule"]
+    j = 0
+    for mid, label, tag in ALL_MODELS:
+        rs = inj(syn, mid)
+        avail = [c for c, _ in sweep if any(r["cond"] == c for r in rs)]
+        if len(avail) < 2:
+            continue
+        xs, ys, los, his, cells = [], [], [], [], []
+        for c, _ in sweep:
+            if c not in avail:
+                cells.append("--")
+                continue
+            fr = [r["recompute_fraction"] for r in rs if r["cond"] == c and r.get("recompute_fraction") is not None]
+            x = mean(fr) if fr else 0.0
+            v, lo, hi = ci(paired(rs, c, "T1", key, "complied", cl))
+            xs.append(x); ys.append(v); los.append(v - lo); his.append(hi - v)
+            cells.append(f"{num(v, True)} [{num(lo)}, {num(hi)}]")
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+        ax.errorbar(xs, ys, yerr=[los, his], color=C[j % 4], marker="o", markersize=3.5, linewidth=1.5,
+                    elinewidth=0.6, capsize=1.5, label=label)
+        j += 1
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("sweep", lines)
+    ax.axhline(0, color=MUTED, linewidth=0.6)
+    ax.set_xlabel("Fraction of prefill compute spent on recompute", fontsize=7, color=INK)
+    ax.set_ylabel("Excess compliance over text (T3x$-$T1)", fontsize=7, color=INK)
+    ax.legend(fontsize=5.5, frameon=False)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(OUT / "figures" / "sweep.pdf")
+    plt.close(fig)
+
+
+
+def injecagent():
+    from skillkv.injecagent import load_cases
+    rows = load("ia_enhanced_*.jsonl")
+    if not rows:
+        return
+    cases = {(c.kind, c.index): c for c in load_cases(ROOT / "data" / "injecagent", 4, "enhanced")}
+    for r in rows:
+        r["attack"] = cases[r["kind"], r["index"]].attacker_instruction
+    cl = lambda r: r["attack"]  # noqa: E731  (cluster: attack case, reused across user cases)
+    key = lambda r: (r["kind"], r["index"])  # noqa: E731
+    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
+             r"Model & T1 & T1$'$ & T3 & T3B15 & $\Delta$ T3$-$T1 & clean T1 / T3 \\", r"\midrule"]
+    for mid, label, tag in ALL_MODELS:
+        rs = [r for r in rows if r["model"] == mid and r["variant"] == "injected"]
+        if not rs:
+            continue
+        clean = [r for r in rows if r["model"] == mid and r["variant"] == "clean"]
+        rate = lambda c, src=rs: mean(float(r["attack_success"]) for r in src if r["cond"] == c)  # noqa: E731
+        d = fmt_ci(paired(rs, "T3", "T1", key, "attack_success", cl), signed=True)
+        lines.append(f"{label} & " + " & ".join(f"{rate(c):.2f}" for c in ("T1", "T1M", "T3", "T3B15"))
+                     + f" & {d} & {rate('T1', clean):.2f} / {rate('T3', clean):.2f} \\\\")
+        m(f"IaTone{tag}", f"{rate('T1'):.2f}")
+        m(f"IaTthree{tag}", f"{rate('T3'):.2f}")
+        m(f"IaD{tag}", d)
+        m(f"IaDMask{tag}", fmt_ci(paired(rs, "T3", "T1M", key, "attack_success", cl), signed=True))
+        m(f"IaResid{tag}", fmt_ci(paired(rs, "T3B15", "T1", key, "attack_success", cl), signed=True))
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("injecagent", lines)
+    m("IaNcases", str(len(cases)))
+    m("IaNattacks", str(len({c.attacker_instruction for c in cases.values()})))
+
+
+
+def prompts_appendix():
+    """Verbatim prompt layouts, rendered from the same code that builds the experiments."""
+    import textwrap
+    from skillkv.agent import Layout
+    from skillkv.chat import LLAMA3, QWEN
+    from skillkv.inject import doc_layout, make_items, make_natural_items
+    from skillkv.injecagent import build_segments, load_cases
+
+    ident = lambda s: [s]  # noqa: E731
+    def show(text, limit=None):
+        if limit and len(text) > limit:
+            text = text[: limit // 2] + "\n[... truncated for display ...]\n" + text[-limit // 2:]
+        out = []
+        for line in text.split("\n"):
+            out += textwrap.wrap(line, 96, break_long_words=True, replace_whitespace=False) or [""]
+        return "\\begin{footnotesize}\\begin{verbatim}\n" + "\n".join(out) + "\n\\end{verbatim}\\end{footnotesize}\n"
+
+    items = make_items(12, 0)
+    it = next(i for i in items if i.injection == "override")
+    parts = []
+    for fmt in (QWEN, LLAMA3):
+        L = doc_layout(ident, items, defended=False, fmt=fmt)
+        L.set_text(it.name, it.doc)
+        seg = (L.sys_lazy_text, "".join(L.user_turn(it.question)) + "".join(L.tool_call(it.name)) + "".join(L.wrap),
+               it.doc, "".join(L.suffix))
+        parts.append(f"\\paragraph{{Agent layout, {fmt.name} format (synthetic document, override injection).}} "
+                     "Segments in order: system, user turn + tool call + tool-result header, document, suffix. "
+                     "\\cond{T3} packs are built after the system segment plus the header only.\n")
+        parts.append(show("<<SYSTEM>>\n" + seg[0] + "\n<<TURN + CALL + HEADER>>\n" + seg[1] + "\n<<DOCUMENT>>\n"
+                          + seg[2] + "\n<<SUFFIX>>\n" + seg[3], limit=4200))
+    nat = next(i for i in make_natural_items(ROOT / "data" / "natural_docs.json") if i.injection == "append")
+    parts.append("\\paragraph{Natural document (append injection), document segment only.}\n")
+    parts.append(show(nat.doc, limit=2400))
+    from skillkv.inject import DEFENSE
+    parts.append("\\paragraph{Defended system prompt addition.}\n" + show(DEFENSE))
+    case = load_cases(ROOT / "data" / "injecagent", 4, "enhanced")[0]
+    seg = build_segments(ident, QWEN, case)
+    parts.append("\\paragraph{InjecAgent (Qwen format).}\n")
+    parts.append(show("".join(seg["sys"]) + "".join(seg["turn"]) + "".join(seg["call"]) + "".join(seg["wrap"])
+                      + "".join(seg["doc"]) + "".join(seg["suffix"]), limit=3000))
+    skills = make_library(12, 0, 400, 2400)
+    from skillkv.synth import make_tasks
+    L = Layout(ident, [(s.name, s.description, s.text) for s in skills])
+    t = make_tasks(skills[0], 1, 0)[0]
+    tm = make_tasks(skills[0], 1, 0, mention_all=True)[0]
+    parts.append("\\paragraph{Skill task (\\cond{C1}) and the all-rules-named variant (\\cond{C1M}).}\n")
+    parts.append(show(t.query + "\n\n" + tm.query))
+    (OUT / "appendix_prompts.tex").write_text("% generated by paper/make_assets.py\n" + "".join(parts))
+
+
 def main():
     (OUT / "figures").mkdir(parents=True, exist_ok=True)
     (OUT / "tables").mkdir(parents=True, exist_ok=True)
@@ -402,6 +575,9 @@ def main():
     w1()
     w2()
     injection()
+    scale_natural()
+    injecagent()
+    prompts_appendix()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))
