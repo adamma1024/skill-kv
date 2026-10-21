@@ -27,7 +27,7 @@ import mlx.core as mx
 from skillkv.agent import generate, post_selection
 from skillkv.blend import blend
 from skillkv.chat import detect_format
-from skillkv.inject import doc_layout, grade_item, make_items, make_natural_items
+from skillkv.inject import datamark, doc_layout, grade_item, make_items, make_natural_items
 from skillkv.pack import build_pack, prefill
 
 CONDS = {"T1": ("C1", None), "T2": ("C2", "c2"), "T3": ("C3", "sys"), "T3G": ("C3", "generic")}
@@ -38,7 +38,9 @@ BLEND = {"T3F16": lambda n, i: list(range(min(16, n))),           # recompute fi
          "T3B15": lambda n, i: ("deviation", 0.15),                # CacheBlend-style 15%
          "T3B30": lambda n, i: ("deviation", 0.30),                # recompute-ratio sweep
          "T3B50": lambda n, i: ("deviation", 0.50),
-         "T1M": None}                                               # text, no attention to the turn
+         "T1M": None,                                               # text, no attention to the turn
+         "T1Mreq": None,   # text; document may attend to the user request but not to the tool call
+         "T1Mcall": None}  # text; document may attend to the tool call but not to the user request
 
 
 def main() -> None:
@@ -47,6 +49,7 @@ def main() -> None:
     ap.add_argument("--n-docs", type=int, default=12)
     ap.add_argument("--items", choices=["synthetic", "natural"], default="synthetic")
     ap.add_argument("--natural-path", type=Path, default=Path("data/natural_docs.json"))
+    ap.add_argument("--spotlight", action="store_true", help="datamark documents and explain it (Hines et al., 2024)")
     ap.add_argument("--seed", type=int, default=0, help="library seed")
     ap.add_argument("--sample-seeds", default="0,1")
     ap.add_argument("--defended", default="0,1")
@@ -74,7 +77,7 @@ def main() -> None:
     done = set()
     if out.exists():
         done = {(r["defended"], r["item"], r["seed"], r["cond"])
-                for r in map(json.loads, out.read_text().splitlines()) if r}
+                for r in map(json.loads, out.read_text().splitlines()) if r and r.get("spotlight", False) == args.spotlight}
 
     model, tok = load(args.model)
     enc = lambda s: tok.encode(s, add_special_tokens=False)  # noqa: E731
@@ -85,7 +88,7 @@ def main() -> None:
 
     with out.open("a") as f:
         for defended in (bool(int(d)) for d in args.defended.split(",")):
-            L = doc_layout(enc, items, defended=defended, fmt=fmt)
+            L = doc_layout(enc, items, defended=defended, fmt=fmt, spotlight=args.spotlight)
             lazy = make_prompt_cache(model)
             prefill(model, lazy, L.sys_lazy)
             n_lazy = lazy[0].offset
@@ -96,11 +99,11 @@ def main() -> None:
                 todo = [(s, c) for s in seeds for c in conds if (defended, idx, s, c) not in done]
                 if not todo:
                     continue
-                L.set_text(it.name, it.doc)
+                L.set_text(it.name, datamark(it.doc) if args.spotlight else it.doc)
                 doc_ids = L.skill(it.name)
                 preludes = {"c2": L.c2_prelude, "sys": L.pack_prelude, "generic": L.generic_prelude(it.name)}
                 kinds = {CONDS[c][1] for _, c in todo if c in CONDS} - {None}
-                if any(c in BLEND and c != "T1M" for _, c in todo):
+                if any(c in BLEND and not c.startswith("T1M") for _, c in todo):
                     kinds.add("sys")
                 packs = {k: build_pack(model, preludes[k], doc_ids, model_id=args.model) for k in kinds}
                 for seed, cond in todo:
@@ -109,11 +112,14 @@ def main() -> None:
                         trim_prompt_cache(lazy, lazy[0].offset - n_lazy)
                         turn = L.user_turn(it.question) + L.tool_call(it.name)
                         cache = lazy
-                        if cond == "T1M":  # [sys turn] + [wrap doc] recomputed without seeing the turn
+                        if cond.startswith("T1M"):  # [sys turn] + [wrap doc] recomputed with masked attention
                             prefill(model, cache, turn)
                             t0 = time.perf_counter()
-                            stats = blend(model, cache, L.wrap + doc_ids, select="all",
-                                          exclude=(n_lazy, n_lazy + len(turn)))
+                            n_req = len(L.user_turn(it.question))
+                            excl = {"T1M": (n_lazy, n_lazy + len(turn)),
+                                    "T1Mreq": (n_lazy + n_req, n_lazy + len(turn)),
+                                    "T1Mcall": (n_lazy, n_lazy + n_req)}[cond]
+                            stats = blend(model, cache, L.wrap + doc_ids, select="all", exclude=excl)
                         else:
                             prefill(model, cache, turn + L.wrap)
                             t0 = time.perf_counter()
@@ -134,7 +140,8 @@ def main() -> None:
                     g = grade_item(answer, it)
                     row = {"model": args.model, "tag": tag, "defended": defended, "item": idx,
                            "doc": it.name, "injection": it.injection, "depth": it.depth,
-                           "canary": it.canary, "cond": cond, "seed": seed, "chat_format": fmt.name, **g,
+                           "canary": it.canary, "cond": cond, "seed": seed, "chat_format": fmt.name,
+                           "spotlight": args.spotlight, **g,
                            "doc_tokens": len(doc_ids), "gen_tokens": len(ids), "ttft_s": ttft,
                            "recompute_fraction": stats["recompute_fraction"] if stats else None,
                            "answer": answer}

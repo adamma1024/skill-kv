@@ -18,7 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from skillkv.stats import boot_ci  # noqa: E402
+from skillkv.stats import boot_ci, holm, perm_test  # noqa: E402
 from skillkv.synth import CONSTRAINT_TYPES, make_library  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -397,7 +397,15 @@ def injection():
 
 # ---------------------------------------------------------------- round 1: scale, natural docs, recompute sweep
 ALL_MODELS = MODELS + [("mlx-community/Qwen3-14B-4bit", "Qwen3-14B (4-bit)", "Fourteen"),
-                       ("mlx-community/Qwen3-32B-4bit", "Qwen3-32B (4-bit)", "ThirtyTwo")]
+                       ("mlx-community/Qwen3-32B-4bit", "Qwen3-32B (4-bit)", "ThirtyTwo"),
+                       ("mlx-community/Llama-3.1-8B-Instruct", "Llama-3.1-8B", "LlamaEight"),
+                       ("mlx-community/Qwen3-8B-4bit", "Qwen3-8B (4-bit)", "EightQ")]
+
+
+def complete(rs, cond, ref="T1"):
+    """Only report a condition once it has as many rows as the reference condition."""
+    n = sum(r["cond"] == cond for r in rs)
+    return n > 0 and n == sum(r["cond"] == ref for r in rs)
 
 
 def scale_natural():
@@ -419,9 +427,14 @@ def scale_natural():
              r"\cmidrule(lr){2-5}\cmidrule(lr){6-9}",
              r"Model & T1 & T1$'$ & T3 & $\Delta$ T3$-$T1 & T1 & T1$'$ & T3 & $\Delta$ T3$-$T1 \\", r"\midrule"]
     for mid, label, tag in ALL_MODELS:
+        if not inj(syn, mid) and not inj(nat, mid):
+            continue
         cells = []
         for rows, kind in ((syn, "Syn"), (nat, "Nat")):
             rs = inj(rows, mid)
+            if not (rs and complete(rs, "T3") and complete(rs, "T1M")):
+                cells += ["--"] * 4
+                continue
             cells += [f"{rate(rs, c):.2f}" for c in ("T1", "T1M", "T3")]
             d = fmt_ci(paired(rs, "T3", "T1", key, "complied", cl), signed=True)
             cells.append(d)
@@ -437,7 +450,9 @@ def scale_natural():
     lines = [r"\begin{tabular}{lrrrr}", r"\toprule", r"Model & T1 & T1$'$ & T3 & T3B15 \\", r"\midrule"]
     for mid, label, tag in ALL_MODELS:
         rs = [r for r in nat if r["model"] == mid and not r["injection"]]
-        cells = [(f"{rate(rs, c, 'correct'):.2f}" if rate(rs, c, "correct") is not None else "--") for c in ("T1", "T1M", "T3", "T3B15")]
+        if not rs or not complete(rs, "T3"):
+            continue
+        cells = [(f"{rate(rs, c, 'correct'):.2f}" if complete(rs, c) else "--") for c in ("T1", "T1M", "T3", "T3B15")]
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
         m(f"NatAccTone{tag}", f"{rate(rs, 'T1', 'correct'):.2f}")
         m(f"NatAccTthree{tag}", f"{rate(rs, 'T3', 'correct'):.2f}")
@@ -456,7 +471,7 @@ def scale_natural():
     j = 0
     for mid, label, tag in ALL_MODELS:
         rs = inj(syn, mid)
-        avail = [c for c, _ in sweep if any(r["cond"] == c for r in rs)]
+        avail = [c for c, _ in sweep if complete(rs, c)]
         if len(avail) < 2:
             continue
         xs, ys, los, his, cells = [], [], [], [], []
@@ -487,10 +502,12 @@ def scale_natural():
 
 def injecagent():
     from skillkv.injecagent import load_cases
-    rows = load("ia_enhanced_*.jsonl")
+    rows = load("ia256_enhanced_*.jsonl")
     if not rows:
         return
     cases = {(c.kind, c.index): c for c in load_cases(ROOT / "data" / "injecagent", 4, "enhanced")}
+    n_full = len(cases) * 4 + len(range(0, len(cases), 4)) * 2  # injected x 4 conds + clean x 2 conds
+    rows = [r for r in rows if sum(x["model"] == r["model"] for x in rows) == n_full]
     for r in rows:
         r["attack"] = cases[r["kind"], r["index"]].attacker_instruction
     cl = lambda r: r["attack"]  # noqa: E731  (cluster: attack case, reused across user cases)
@@ -511,6 +528,11 @@ def injecagent():
         m(f"IaD{tag}", d)
         m(f"IaDMask{tag}", fmt_ci(paired(rs, "T3", "T1M", key, "attack_success", cl), signed=True))
         m(f"IaResid{tag}", fmt_ci(paired(rs, "T3B15", "T1", key, "attack_success", cl), signed=True))
+        for kind in ("dh", "ds"):
+            ks = [r for r in rs if r["kind"] == kind]
+            m(f"Ia{kind.upper()}{tag}", f"{mean(float(r['attack_success']) for r in ks if r['cond'] == 'T1'):.2f} $\\rightarrow$ "
+                                      f"{mean(float(r['attack_success']) for r in ks if r['cond'] == 'T3'):.2f}")
+        m(f"IaTrunc{tag}", f"{100 * mean(r['truncated'] for r in rs):.1f}")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("injecagent", lines)
     m("IaNcases", str(len(cases)))
@@ -579,65 +601,116 @@ def attention():
             comp[r["model"], r["tag"], r["item"], r["cond"]] = r["complied"]
     cl = lambda r: (r["tag"], r["doc"])  # noqa: E731
     key = lambda r: (r["tag"], r["item"])  # noqa: E731
+    src = lambda r: "nat" if r["tag"].startswith("nat") else "syn"  # noqa: E731
 
     def contrast(rs, a, b, field):
         by = defaultdict(dict)
         for r in rs:
             by[r["cond"]][key(r)] = r
         ks = sorted(set(by[a]) & set(by[b]))
-        return [(cl(by[a][k]), by[a][k]["mean"][field] - by[b][k]["mean"][field]) for k in ks]
+        return [(cl(by[a][k]), 100 * (by[a][k]["mean"][field] - by[b][k]["mean"][field])) for k in ks]
 
-    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
-             r"& \multicolumn{3}{c}{Attention to injected span ($\times 10^{-2}$)} & \multicolumn{3}{c}{Attention to user turn ($\times 10^{-2}$)} \\",
-             r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
-             r"Model & T1 & T3 & T3$-$T1 & T1 & T3 & T3$-$T1 \\", r"\midrule"]
-    for mid, label, tag in ALL_MODELS:
+    def boot_diff(flips, stays, n=2000, seed=0):
+        """CI for mean(flip) - mean(stay), resampling documents."""
+        import random
+        docs = sorted({c for c, _ in flips + stays})
+        fd, sd = defaultdict(list), defaultdict(list)
+        for c, v in flips:
+            fd[c].append(v)
+        for c, v in stays:
+            sd[c].append(v)
+        rng, est = random.Random(seed), []
+        for _ in range(n):
+            pick = rng.choices(docs, k=len(docs))
+            f_ = [v for d in pick for v in fd[d]]
+            s_ = [v for d in pick for v in sd[d]]
+            if f_ and s_:
+                est.append(mean(f_) - mean(s_))
+        est.sort()
+        v = mean(v for _, v in flips) - mean(v for _, v in stays)
+        return f"{num(v, True)} [{num(est[int(0.025 * len(est))])}, {num(est[int(0.975 * len(est))])}]"
+
+    lines = [r"\begin{tabular}{lrrrrr}", r"\toprule",
+             r"& \multicolumn{2}{c}{$\Delta$ attention to injected span} & \multicolumn{2}{c}{$\Delta$ attention to user turn} & Flip $-$ stay \\",
+             r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}",
+             r"Model & Synthetic & Natural & Synthetic & Natural & (pooled) \\", r"\midrule"]
+    present = [(mid, label, tag) for mid, label, tag in ALL_MODELS if any(r["model"] == mid for r in rows)]
+    for mid, label, tag in present:
         rs = [r for r in rows if r["model"] == mid]
-        if not rs:
-            continue
-        mu = lambda c, f: 100 * mean(r["mean"][f] for r in rs if r["cond"] == c)  # noqa: E731
-        di = [(c_, 100 * v) for c_, v in contrast(rs, "T3", "T1", "injection")]
-        du = [(c_, 100 * v) for c_, v in contrast(rs, "T3", "T1", "user_turn")]
-        lines.append(f"{label} & {mu('T1', 'injection'):.2f} & {mu('T3', 'injection'):.2f} & {fmt_ci(di, True)} & "
-                     f"{mu('T1', 'user_turn'):.2f} & {mu('T3', 'user_turn'):.2f} & {fmt_ci(du, True)} \\\\")
-        m(f"AttnInjD{tag}", fmt_ci(di, True))
-        m(f"AttnUserD{tag}", fmt_ci(du, True))
-        m(f"AttnInjMaskD{tag}", fmt_ci([(c_, 100 * v) for c_, v in contrast(rs, "T3", "T1M", "injection")], True))
-        # does the per-item shift in attention predict which items flip to compliance?
+        cells = []
+        for field in ("injection", "user_turn"):
+            for source in ("syn", "nat"):
+                d = contrast([r for r in rs if src(r) == source], "T3", "T1", field)
+                cells.append(fmt_ci(d, True))
+                m(f"Attn{'Inj' if field == 'injection' else 'User'}{source.title()}{tag}", fmt_ci(d, True))
         flips, stays = [], []
         for r3 in (r for r in rs if r["cond"] == "T3"):
             r1 = next((r for r in rs if r["cond"] == "T1" and key(r) == key(r3)), None)
             c1, c3 = comp.get((mid, r3["tag"], r3["item"], "T1")), comp.get((mid, r3["tag"], r3["item"], "T3"))
             if r1 is None or c1 is None or c3 is None:
                 continue
-            d = 100 * (r3["mean"]["injection"] - r1["mean"]["injection"])
+            d = (cl(r3), 100 * (r3["mean"]["injection"] - r1["mean"]["injection"]))
             (flips if (c3 and not c1) else stays).append(d)
-        if flips and stays:
-            m(f"AttnFlip{tag}", f"{mean(flips):.2f}")
-            m(f"AttnStay{tag}", f"{mean(stays):.2f}")
-            m(f"AttnNflip{tag}", str(len(flips)))
+        fs = boot_diff(flips, stays) if flips and stays else "--"
+        cells.append(fs)
+        m(f"AttnFlipStay{tag}", fs)
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("attention", lines)
 
-    # per-layer profile for one model: injected-span attention, T1 vs T3 vs T1M
-    pick = next((mid for mid, _, _ in ALL_MODELS if mid == "Qwen/Qwen3-8B" and any(r["model"] == mid for r in rows)),
-                rows[0]["model"])
-    fig, ax = plt.subplots(figsize=(3.3, 2.0))
-    style(ax)
-    roles = {"T1": (C[0], "T1 text"), "T1M": (C[3], "T1$'$ masked"), "T3": (C[1], "T3 pack")}
-    for c, (col, lab) in roles.items():
-        rs = [r for r in rows if r["model"] == pick and r["cond"] == c]
-        n_layers = len(rs[0]["per_layer"]["injection"])
-        ys = [100 * mean(r["per_layer"]["injection"][l] for r in rs) for l in range(n_layers)]
-        ax.plot(range(n_layers), ys, color=col, linewidth=1.5, label=lab)
-    ax.set_xlabel("Layer", fontsize=7, color=INK)
-    ax.set_ylabel("Attention to injected span (%)", fontsize=7, color=INK)
-    ax.legend(fontsize=6, frameon=False)
-    fig.tight_layout(pad=0.3)
+    fig, axes = plt.subplots(1, len(present), figsize=(6.75, 1.9), sharey=True)
+    for ax, (mid, label, _) in zip(axes, present):
+        style(ax)
+        for j, source in enumerate(("syn", "nat")):
+            rs = [r for r in rows if r["model"] == mid and src(r) == source]
+            by = defaultdict(dict)
+            for r in rs:
+                by[r["cond"]][key(r)] = r
+            ks = sorted(set(by["T1"]) & set(by["T3"]))
+            n_layers = len(rs[0]["per_layer"]["injection"])
+            ys = [100 * mean(by["T3"][k]["per_layer"]["injection"][l] - by["T1"][k]["per_layer"]["injection"][l] for k in ks)
+                  for l in range(n_layers)]
+            ax.plot([l / (n_layers - 1) for l in range(n_layers)], ys, color=C[j], linewidth=1.3,
+                    label="synthetic" if source == "syn" else "natural")
+        ax.axhline(0, color=MUTED, linewidth=0.6)
+        ax.set_title(label, fontsize=7, color=INK)
+        ax.set_xlabel("Relative depth", fontsize=6.5, color=INK)
+    axes[0].set_ylabel("T3$-$T1 attention to\ninjected span (pp)", fontsize=6.5, color=INK)
+    axes[0].legend(fontsize=6, frameon=False)
+    fig.tight_layout(pad=0.3, w_pad=0.6)
     fig.savefig(OUT / "figures" / "attention_layers.pdf")
     plt.close(fig)
-    m("AttnFigModel", dict((a, b) for a, b, _ in ALL_MODELS)[pick])
 
+
+def primary():
+    """Pre-designated primary contrasts (T3 - T1 per model x dataset), cluster sign-flip
+    permutation p-values and Holm adjustment across the family."""
+    syn = [r for r in load("w5_*.jsonl") + load("w8_*.jsonl") if not r["defended"] and r["injection"]]
+    nat = [r for r in load("w7_*.jsonl") if r["injection"]]
+    ia = [r for r in load("ia256_enhanced_*.jsonl") if r["variant"] == "injected"]
+    from skillkv.injecagent import load_cases
+    cases = {(c.kind, c.index): c.attacker_instruction for c in load_cases(ROOT / "data" / "injecagent", 4, "enhanced")}
+    for r in ia:
+        r["complied"], r["attack"] = r["attack_success"], cases[r["kind"], r["index"]]
+    fam = []
+    for mid, label, tag in ALL_MODELS:
+        for name, rows, k, c in (("Synthetic", syn, lambda r: (r["tag"], r["item"], r["seed"]), lambda r: (r["tag"], r["doc"])),
+                                 ("Natural", nat, lambda r: (r["tag"], r["item"], r["seed"]), lambda r: (r["tag"], r["doc"])),
+                                 ("InjecAgent", ia, lambda r: (r["kind"], r["index"]), lambda r: r["attack"])):
+            rs = [r for r in rows if r["model"] == mid]
+            if not rs or not complete(rs, "T3"):
+                continue
+            d = paired(rs, "T3", "T1", k, "complied", c)
+            fam.append((label, name, d, perm_test(d)))
+    adj = holm([p for *_, p in fam])
+    lines = [r"\begin{tabular}{llrrr}", r"\toprule", r"Model & Data & $\Delta$ T3$-$T1 [95\% CI] & $p$ & $p_\text{Holm}$ \\", r"\midrule"]
+    for (label, name, d, p_), pa in zip(fam, adj):
+        fp = lambda x: "$<$0.001" if x < 0.001 else f"{x:.3f}"  # noqa: E731
+        lines.append(f"{label} & {name} & {fmt_ci(d, True)} & {fp(p_)} & {fp(pa)} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("primary", lines)
+    m("PrimaryN", str(len(fam)))
+    m("PrimarySig", str(sum(pa < 0.05 for pa in adj)))
 
 
 def mechanism_all():
@@ -689,6 +762,7 @@ def main():
     prompts_appendix()
     attention()
     mechanism_all()
+    primary()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))

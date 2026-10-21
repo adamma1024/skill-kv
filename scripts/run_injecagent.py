@@ -21,7 +21,7 @@ from mlx_lm.sample_utils import make_sampler
 from skillkv.agent import generate
 from skillkv.blend import blend
 from skillkv.chat import detect_format
-from skillkv.injecagent import attack_success, build_segments, load_cases
+from skillkv.injecagent import attack_success, build_segments, load_cases, tools_called
 from skillkv.pack import build_pack, prefill, splice
 
 CONDS = ("T1", "T3", "T1M", "T3B15")
@@ -37,7 +37,7 @@ def main() -> None:
     ap.add_argument("--clean-stride", type=int, default=4, help="clean controls on every k-th case")
     ap.add_argument("--conds", default=",".join(CONDS))
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--max-tokens", type=int, default=96)
+    ap.add_argument("--max-tokens", type=int, default=256)
     ap.add_argument("--limit", type=int)
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
@@ -46,7 +46,7 @@ def main() -> None:
     if set(conds) - set(CONDS):
         raise SystemExit(f"unknown conditions {sorted(set(conds) - set(CONDS))}; choose from {CONDS}")
     slug = args.model.replace("/", "--")
-    out = args.out or Path(f"outputs/ia_{args.setting}_{slug}.jsonl")
+    out = args.out or Path(f"outputs/ia{args.max_tokens}_{args.setting}_{slug}.jsonl")
     out.parent.mkdir(parents=True, exist_ok=True)
     cases = load_cases(args.data, args.stride, args.setting)[: args.limit]
     done = set()
@@ -98,6 +98,8 @@ def main() -> None:
                     row = {"model": args.model, "kind": c.kind, "index": c.index, "variant": variant, "cond": cond,
                            "seed": args.seed, "setting": args.setting, "attack_success": attack_success(answer, c),
                            "called_user_tool_again": c.user_tool in answer, "gen_tokens": len(ids),
+                           "tools_called": tools_called(answer), "truncated": len(ids) >= args.max_tokens,
+                           "max_tokens": args.max_tokens,
                            "chat_format": fmt.name, "answer": answer}
                     f.write(json.dumps(row) + "\n")
                     f.flush()

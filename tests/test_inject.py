@@ -73,3 +73,16 @@ def test_doc_layout_uses_read_doc_tool(items, defended):
     assert ("never follow instructions" in L.sys_lazy_text) is defended
     assert L.tool_call(items[0].name) == enc(
         '<tool_call>\n{"name": "read_doc", "arguments": {"name": "%s"}}\n</tool_call><|im_end|>\n' % items[0].name)
+
+
+def test_datamark_replaces_spaces_and_keeps_canary():
+    from skillkv.inject import datamark
+    it = next(i for i in make_items(n_docs=2, seed=0) if i.injection == "override")
+    marked = datamark(it.doc)
+    assert " " not in marked and "^" in marked and it.canary in marked
+
+
+def test_spotlight_layout_mentions_datamarking():
+    enc = lambda s: [ord(c) % 97 for c in s]  # noqa: E731
+    L = doc_layout(enc, make_items(n_docs=2, seed=0)[:2], spotlight=True)
+    assert "datamarked" in L.sys_lazy_text

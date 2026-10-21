@@ -111,3 +111,12 @@ def test_mention_all_query_names_every_item_but_no_secret_values(lib):
             for c in s.constraints:
                 if c.type != "param":
                     assert c.value not in f.query
+
+
+def test_perm_test_and_holm():
+    from skillkv.stats import holm, perm_test
+    null = [(c, (1 if (c + i) % 2 else -1) * 0.1) for c in range(20) for i in range(4)]
+    assert perm_test(null, n=2000) > 0.2
+    shifted = [(c, 0.3 + (0.05 if i % 2 else -0.05)) for c in range(20) for i in range(4)]
+    assert perm_test(shifted, n=2000) < 0.01
+    assert holm([0.01, 0.04, 0.03]) == [0.03, 0.06, 0.06]
