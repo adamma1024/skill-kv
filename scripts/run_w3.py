@@ -27,7 +27,7 @@ import mlx.core as mx
 from skillkv.agent import generate, post_selection
 from skillkv.blend import blend
 from skillkv.chat import detect_format
-from skillkv.inject import doc_layout, grade_item, make_items
+from skillkv.inject import doc_layout, grade_item, make_items, make_natural_items
 from skillkv.pack import build_pack, prefill
 
 CONDS = {"T1": ("C1", None), "T2": ("C2", "c2"), "T3": ("C3", "sys"), "T3G": ("C3", "generic")}
@@ -36,6 +36,8 @@ BLEND = {"T3F16": lambda n, i: list(range(min(16, n))),           # recompute fi
          "T3L16": lambda n, i: list(range(max(0, n - 16), n)),     # recompute last 16
          "T3R15": lambda n, i: ("random", 0.15, i),                # random 15%
          "T3B15": lambda n, i: ("deviation", 0.15),                # CacheBlend-style 15%
+         "T3B30": lambda n, i: ("deviation", 0.30),                # recompute-ratio sweep
+         "T3B50": lambda n, i: ("deviation", 0.50),
          "T1M": None}                                               # text, no attention to the turn
 
 
@@ -43,6 +45,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3-4B")
     ap.add_argument("--n-docs", type=int, default=12)
+    ap.add_argument("--items", choices=["synthetic", "natural"], default="synthetic")
+    ap.add_argument("--natural-path", type=Path, default=Path("data/natural_docs.json"))
     ap.add_argument("--seed", type=int, default=0, help="library seed")
     ap.add_argument("--sample-seeds", default="0,1")
     ap.add_argument("--defended", default="0,1")
@@ -60,11 +64,12 @@ def main() -> None:
         raise SystemExit(f"unknown conditions {sorted(set(conds) - set(CONDS) - set(BLEND))}; "
                          f"choose from {list(CONDS) + list(BLEND)}")
     slug = args.model.replace("/", "--")
-    tag = f"s{args.seed}_n{args.n_docs}"
+    tag = f"s{args.seed}_n{args.n_docs}" if args.items == "synthetic" else f"nat{args.seed}"
     out = args.out or Path(f"outputs/w3_{slug}_{tag}.jsonl")
     out.parent.mkdir(parents=True, exist_ok=True)
     seeds = [int(s) for s in args.sample_seeds.split(",")]
-    items = make_items(args.n_docs, args.seed)[: args.limit]
+    items = (make_items(args.n_docs, args.seed) if args.items == "synthetic"
+             else make_natural_items(args.natural_path, args.seed))[: args.limit]
 
     done = set()
     if out.exists():
