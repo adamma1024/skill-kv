@@ -1,6 +1,8 @@
 \begin{tabular}{lrrrrr}
 \toprule
-Model & TTFT speedup (median, range) & Text TTFT & Pack TTFT & KB/token & KL (sys / exact) \\
+& TTFT speedup & \multicolumn{2}{c}{Longest skill (5{,}506 tok)} & & KL to text \\
+\cmidrule(lr){3-4}
+Model & median (range) & text & pack & KB/token & sys / exact prelude \\
 \midrule
 Qwen3-1.7B & 9.8$\times$ (4.3--20.8) & 1.53\,s & 0.07\,s & 112 & 0.092 / 0.001 \\
 Qwen3-4B & 13.4$\times$ (3.5--26.6) & 5.98\,s & 0.28\,s & 144 & 0.065 / 0.001 \\

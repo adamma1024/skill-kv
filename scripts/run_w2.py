@@ -23,6 +23,7 @@ from mlx_lm.models.cache import make_prompt_cache, trim_prompt_cache
 from mlx_lm.sample_utils import make_sampler
 
 from skillkv.agent import Layout, generate, post_selection
+from skillkv.chat import detect_format
 from skillkv.pack import build_pack, load_pack, prefill, save_pack, token_hash
 from skillkv.synth import grade, make_library, make_tasks
 
@@ -73,7 +74,9 @@ def main() -> None:
     enc = lambda s: tok.encode(s, add_special_tokens=False)  # noqa: E731
     eos = set(getattr(tok, "eos_token_ids", None) or [tok.eos_token_id])
     sampler = make_sampler(temp=args.temp, top_p=args.top_p, top_k=args.top_k)
-    L = Layout(enc, [(s.name, s.description, s.text) for s in lib])
+    fmt = detect_format(tok)
+    print(f"chat format: {fmt.name}", flush=True)
+    L = Layout(enc, [(s.name, s.description, s.text) for s in lib], fmt=fmt)
 
     def prelude(kind, name):
         return {"C2": L.c2_prelude, "C3": L.pack_prelude, "C3G": L.generic_prelude(name)}[kind]
@@ -121,7 +124,7 @@ def main() -> None:
                            "gen_tokens": len(ids), "truncated": len(ids) >= args.max_tokens,
                            "grade": g, "all_pass": all(g.values()), "depth": depth, "answer": answer,
                            "temp": args.temp, "top_p": args.top_p, "top_k": args.top_k,
-                           "max_tokens": args.max_tokens}
+                           "max_tokens": args.max_tokens, "chat_format": fmt.name}
                     f.write(json.dumps(row) + "\n")
                     f.flush()
                     print(f"[{i + 1}/{len(tasks)}] {tid:<30} s{seed} {cond:<3} pass={sum(g.values())}/5 "

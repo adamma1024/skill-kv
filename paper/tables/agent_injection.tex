@@ -1,9 +1,11 @@
-\begin{tabular}{lrrrrrr}
+\begin{tabular}{lrrrrrrr}
 \toprule
-Model & T1 & T3 & T3G & T1$'$ & T3B15 & $\Delta$ T3$-$T1 [95\% CI] \\
+& \multicolumn{5}{c}{Plain system prompt} & \multicolumn{2}{c}{Defended prompt} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-8}
+Model & T1 & T2 & T3 & T3G & T1$'$ & T1 & T3 \\
 \midrule
-Qwen3-4B & 0.11 & 0.52 & 0.28 & 0.51 & 0.40 & +0.41 [0.35, 0.47] \\
-Qwen3-8B & 0.00 & 0.20 & 0.13 & 0.22 & 0.09 & +0.20 [0.12, 0.28] \\
-Llama-3.2-3B & 0.03 & 0.18 & 0.01 & 0.25 & 0.12 & +0.15 [0.08, 0.22] \\
+Qwen3-4B & 0.11 & 0.10 & 0.52 & 0.28 & 0.51 & 0.12 & 0.51 \\
+Qwen3-8B & 0.00 & 0.00 & 0.20 & 0.13 & 0.22 & 0.00 & 0.22 \\
+Llama-3.2-3B & 0.03 & 0.00 & 0.18 & 0.01 & 0.25 & 0.01 & 0.16 \\
 \bottomrule
 \end{tabular}

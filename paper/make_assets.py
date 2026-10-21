@@ -8,6 +8,7 @@ Nothing in the paper's results is typed by hand.
 
 import glob
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, median
@@ -18,16 +19,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from skillkv.stats import boot_ci  # noqa: E402
-from skillkv.synth import CONSTRAINT_TYPES  # noqa: E402
+from skillkv.synth import CONSTRAINT_TYPES, make_library  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "paper"
-MODELS = [("Qwen/Qwen3-4B", "Qwen3-4B"), ("Qwen/Qwen3-8B", "Qwen3-8B"),
-          ("mlx-community/Llama-3.2-3B-Instruct", "Llama-3.2-3B")]
-# categorical slots 1-4 of the validated reference palette (light), fixed order
+MODELS = [("Qwen/Qwen3-4B", "Qwen3-4B", "Four"), ("Qwen/Qwen3-8B", "Qwen3-8B", "Eight"),
+          ("mlx-community/Llama-3.2-3B-Instruct", "Llama-3.2-3B", "Llama")]
+# categorical slots of the validated reference palette (light), fixed order and fixed meaning
 C = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
 INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e6e5e0"
-
 macros: dict[str, str] = {}
 
 
@@ -39,8 +39,11 @@ def m(name, value):
     macros[name] = value
 
 
-def pct(x):
-    return f"{100 * x:.0f}"
+def num(x, sign=False, digits=2):
+    t = f"{abs(x):.{digits}f}"
+    if x < 0 and float(t) != 0:
+        return "$-$" + t
+    return ("+" if sign else "") + t
 
 
 def ci(items):
@@ -48,13 +51,10 @@ def ci(items):
     return mean(v for _, v in items), lo, hi
 
 
-def fmt_ci(items, signed=False, digits=2):
+def fmt_ci(items, signed=False):
+    if not items:
+        return "--"
     v, lo, hi = ci(items)
-    def num(x, sign=False):
-        t = f"{abs(x):.{digits}f}"
-        if x < 0 and float(t) != 0:
-            return "$-$" + t
-        return ("+" if sign else "") + t
     return f"{num(v, signed)} [{num(lo)}, {num(hi)}]"
 
 
@@ -64,6 +64,11 @@ def paired(rows, a, b, key, field, cluster):
         by[r["cond"]][key(r)] = r
     ks = sorted(set(by[a]) & set(by[b]))
     return [(cluster(by[a][k]), float(by[a][k][field]) - float(by[b][k][field])) for k in ks]
+
+
+def upper95(n):
+    """One-sided 95% upper bound on a rate with 0 successes in n trials (exact binomial)."""
+    return 1 - 0.05 ** (1 / n)
 
 
 def style(ax):
@@ -77,7 +82,11 @@ def style(ax):
     ax.set_axisbelow(True)
 
 
-# ---------------------------------------------------------------- pilot (speed)
+def write_table(name, lines):
+    (OUT / "tables" / f"{name}.tex").write_text("\n".join(lines) + "\n")
+
+
+# ---------------------------------------------------------------- pilot (fidelity, latency)
 def pilot():
     rows = []
     for name in ("Qwen--Qwen3-1.7B", "Qwen--Qwen3-4B"):
@@ -87,90 +96,136 @@ def pilot():
         full = {r["skill"]: r for r in rs if r["cond"] == "pack:full+seam0"}
         sp = [text[s]["ttft_s"] / sysr[s]["ttft_s"] for s in sysr]
         big = max(text.values(), key=lambda r: r["skill_tokens"])
-        label = name.split("--")[1]
-        rows.append((label, median(sp), min(sp), max(sp), big["skill_tokens"], big["ttft_s"],
+        rows.append((name.split("--")[1], median(sp), min(sp), max(sp), big["skill_tokens"], big["ttft_s"],
                      sysr[big["skill"]]["ttft_s"], sysr[big["skill"]]["pack_mb"] * 1024 / big["skill_tokens"],
                      mean(r["kl_mean"] for r in sysr.values()), mean(r["kl_mean"] for r in full.values())))
     lines = [r"\begin{tabular}{lrrrrr}", r"\toprule",
-             r"Model & TTFT speedup (median, range) & Text TTFT & Pack TTFT & KB/token & KL (sys / exact) \\",
-             r"\midrule"]
+             r"& TTFT speedup & \multicolumn{2}{c}{Longest skill (%s tok)} & & KL to text \\" % f"{rows[1][4]:,}".replace(",", "{,}"),
+             r"\cmidrule(lr){3-4}",
+             r"Model & median (range) & text & pack & KB/token & sys / exact prelude \\", r"\midrule"]
     for (label, med, lo, hi, tok, t_text, t_pack, kb, kl_sys, kl_full) in rows:
         lines.append(f"{label} & {med:.1f}$\\times$ ({lo:.1f}--{hi:.1f}) & {t_text:.2f}\\,s & {t_pack:.2f}\\,s "
                      f"& {kb:.0f} & {kl_sys:.3f} / {kl_full:.3f} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
-    (OUT / "tables" / "pilot.tex").write_text("\n".join(lines) + "\n")
-    q4 = rows[1]
-    m("PilotSpeedupOne", f"{rows[0][1]:.1f}")
+    write_table("pilot", lines)
     kls = [r[8] for r in rows]
-    m("PilotKLRange", f"{min(kls):.2f}--{max(kls):.2f}")
-    m("PilotSpeedupFour", f"{q4[1]:.1f}")
-    m("PilotLongTok", f"{q4[4]:,}".replace(",", "{,}"))
-    m("PilotLongText", f"{q4[5]:.2f}")
-    m("PilotLongPack", f"{q4[6]:.2f}")
-    m("PilotKBFour", f"{q4[7]:.0f}")
+    m("PilotKLRange", f"{min(kls):.3f}--{max(kls):.3f}")
+    m("PilotSpeedupOne", f"{rows[0][1]:.1f}")
+    m("PilotSpeedupFour", f"{rows[1][1]:.1f}")
+    m("PilotKBFour", f"{rows[1][7]:.0f}")
 
 
-# ---------------------------------------------------------------- W2 (skills)
-W2_ORDER = [("C1", "C1 text"), ("C2", "C2 sys-prefix"), ("C3", "C3 KV pack"),
-            ("C1M", "C1M text, all named"), ("C3M", "C3M pack, all named"), ("C3G", "C3G pack, saw dialogue")]
+# ---------------------------------------------------------------- W1 (greedy; 1.7B and 4B)
+def w1():
+    rows = load("w1_*.jsonl")
+    cl = lambda r: (r["tag"], r["skill"])  # noqa: E731
+    key = lambda r: (r["tag"], r["task_id"])  # noqa: E731
+    for mid, tag in (("Qwen/Qwen3-1.7B", "OneSeven"), ("Qwen/Qwen3-4B", "Four")):
+        rs = [r for r in rows if r["model"] == mid]
+        for c in ("C1", "C3"):
+            sel = [r for r in rs if r["cond"] == c]
+            cc = c.replace("1", "one").replace("3", "three")
+            m(f"Wone{tag}{cc}", f"{mean(r['all_pass'] for r in sel):.2f}")
+            m(f"Wone{tag}Score{cc}", f"{mean(sum(r['grade'].values()) / 5 for r in sel):.2f}")
+        m(f"Wone{tag}D", fmt_ci(paired(rs, "C3", "C1", key, "all_pass", cl), signed=True))
+
+
+# ---------------------------------------------------------------- W2 (skills, sampling)
+W2_ORDER = [("C1", "C1 text"), ("C2", "C2 system prefix"), ("C3", "C3 pack"),
+            ("C1M", "C1M text, all rules named"), ("C3M", "C3M pack, all rules named"),
+            ("C3G", "C3G pack, conversation prelude")]
+_LIBS: dict[str, dict] = {}
+
+
+def strict_all_pass(r):
+    """All five rules, with `code` required on the first non-empty line and `signoff` on the last."""
+    if r["tag"] not in _LIBS:
+        seed, n = map(int, re.match(r"s(\d+)_n(\d+)", r["tag"]).groups())
+        _LIBS[r["tag"]] = {s.name: {c.type: c.value for c in s.constraints} for s in make_library(n, seed, 400, 2400)}
+    v = _LIBS[r["tag"]][r["skill"]]
+    lines = [l.strip() for l in r["answer"].strip().splitlines() if l.strip()]
+    if not lines:
+        return False
+    first = re.sub(r"^[`*#>\s]+", "", lines[0])
+    code_ok = re.match(r"code\s*:\s*" + re.escape(v["code"]), first, re.I) is not None
+    sign_ok = re.search(r"--\s*" + re.escape(v["signoff"]) + r"\s*--", lines[-1], re.I) is not None
+    g = r["grade"]
+    return code_ok and sign_ok and g["filename"] and g["param"] and g["heading"]
 
 
 def w2():
     rows = load("w2_*.jsonl")
     for r in rows:
         r["score"] = sum(r["grade"].values()) / len(CONSTRAINT_TYPES)
+        r["strict"] = strict_all_pass(r)
     cl = lambda r: (r["tag"], r["skill"])  # noqa: E731
     key = lambda r: (r["tag"], r["task_id"], r["seed"])  # noqa: E731
-    by = defaultdict(list)
-    for r in rows:
-        by[r["cond"]].append(r)
-    lines = [r"\begin{tabular}{lrrrrr}", r"\toprule",
-             r"Condition & All-5 pass [95\% CI] & Constraint score & \texttt{code} & \texttt{signoff} & TTFT \\",
-             r"\midrule"]
+    present = [(mid, label, tag) for mid, label, tag in MODELS if any(r["model"] == mid for r in rows)]
     stats = {}
-    for c, label in W2_ORDER:
-        rs = by[c]
-        v, lo, hi = ci([(cl(r), float(r["all_pass"])) for r in rs])
-        stats[c] = (v, lo, hi)
-        lines.append(f"{label} & {v:.2f} [{lo:.2f}, {hi:.2f}] & {mean(r['score'] for r in rs):.2f} & "
-                     f"{mean(r['grade']['code'] for r in rs):.2f} & {mean(r['grade']['signoff'] for r in rs):.2f} & "
-                     f"{median(r['ttft_s'] for r in rs):.2f}\\,s \\\\")
+    for mid, label, tag in present:
+        rs = [r for r in rows if r["model"] == mid]
+        for c, _ in W2_ORDER:
+            stats[mid, c] = ci([(cl(r), float(r["all_pass"])) for r in rs if r["cond"] == c])
+        d = lambda a, b, field="all_pass": paired(rs, a, b, key, field, cl)  # noqa: E731
+        m(f"Wtwo{tag}Cone", f"{stats[mid, 'C1'][0]:.2f}")
+        m(f"Wtwo{tag}Cthree", f"{stats[mid, 'C3'][0]:.2f}")
+        m(f"Wtwo{tag}Ctwo", f"{stats[mid, 'C2'][0]:.2f}")
+        m(f"Wtwo{tag}ConeM", f"{stats[mid, 'C1M'][0]:.2f}")
+        m(f"Wtwo{tag}CthreeG", f"{stats[mid, 'C3G'][0]:.2f}")
+        m(f"Wtwo{tag}Dthree", fmt_ci(d("C3", "C1"), signed=True))
+        m(f"Wtwo{tag}DthreeTwo", fmt_ci(d("C3", "C2"), signed=True))
+        m(f"Wtwo{tag}DMM", fmt_ci(d("C3M", "C1M"), signed=True))
+        m(f"Wtwo{tag}DG", fmt_ci(d("C3G", "C1"), signed=True))
+        m(f"Wtwo{tag}DStrict", fmt_ci(d("C3", "C1", "strict"), signed=True))
+        for c in ("C1", "C3"):
+            sel = [r for r in rs if r["cond"] == c]
+            cc = c.replace("1", "one").replace("3", "three")
+            m(f"Wtwo{tag}Code{cc}", f"{mean(r['grade']['code'] for r in sel):.2f}")
+            m(f"Wtwo{tag}Sign{cc}", f"{mean(r['grade']['signoff'] for r in sel):.2f}")
+            m(f"Wtwo{tag}Head{cc}", f"{mean(r['grade']['heading'] for r in sel):.2f}")
+            m(f"Wtwo{tag}TTFT{cc}", f"{median(r['ttft_s'] for r in sel):.2f}")
+            m(f"Wtwo{tag}Strict{cc}", f"{mean(r['strict'] for r in sel):.2f}")
+        m(f"Wtwo{tag}Trunc", f"{100 * mean(r['truncated'] for r in rs):.0f}")
+    m("WtwoNtasks", str(len({(r["tag"], r["task_id"]) for r in rows if r["model"] == MODELS[0][0]})))
+    m("WtwoNskills", str(len({cl(r) for r in rows if r["model"] == MODELS[0][0]})))
+    m("WtwoNmodels", str(len(present)))
+
+    lines = [r"\begin{tabular}{l" + "c" * 5 + "}", r"\toprule",
+             r"Model & \texttt{code} & \texttt{signoff} & \texttt{heading} & \texttt{filename} & \texttt{param} \\",
+             r"\midrule"]
+    for mid, label, _ in present:
+        rs = [r for r in rows if r["model"] == mid]
+        cells = []
+        for t in ("code", "signoff", "heading", "filename", "param"):
+            a_, b_ = (mean(r["grade"][t] for r in rs if r["cond"] == c) for c in ("C1", "C3"))
+            cells.append(f"{a_:.2f} $\\rightarrow$ {b_:.2f}")
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
-    (OUT / "tables" / "w2.tex").write_text("\n".join(lines) + "\n")
+    write_table("skillrules", lines)
 
-    d = lambda a, b: paired(rows, a, b, key, "all_pass", cl)  # noqa: E731
-    m("WtwoNtasks", str(len({(r["tag"], r["task_id"]) for r in rows})))
-    m("WtwoNskills", str(len({cl(r) for r in rows})))
-    m("WtwoCone", f"{stats['C1'][0]:.2f}")
-    m("WtwoCtwo", f"{stats['C2'][0]:.2f}")
-    m("WtwoCthree", f"{stats['C3'][0]:.2f}")
-    m("WtwoConeM", f"{stats['C1M'][0]:.2f}")
-    m("WtwoCthreeM", f"{stats['C3M'][0]:.2f}")
-    m("WtwoCthreeG", f"{stats['C3G'][0]:.2f}")
-    m("WtwoDthree", fmt_ci(d("C3", "C1"), signed=True))
-    m("WtwoDtwo", fmt_ci(d("C2", "C1"), signed=True))
-    m("WtwoDthreeTwo", fmt_ci(d("C3", "C2"), signed=True))
-    m("WtwoDMM", fmt_ci(d("C3M", "C1M"), signed=True))
-    m("WtwoDG", fmt_ci(d("C3G", "C1"), signed=True))
-    m("WtwoCodeCone", f"{mean(r['grade']['code'] for r in by['C1']):.2f}")
-    m("WtwoCodeCthree", f"{mean(r['grade']['code'] for r in by['C3']):.2f}")
-    m("WtwoTTFTCone", f"{median(r['ttft_s'] for r in by['C1']):.2f}")
-    m("WtwoTTFTCthree", f"{median(r['ttft_s'] for r in by['C3']):.2f}")
-    m("WtwoTrunc", pct(mean(r["truncated"] for r in rows)))
+    head = " & ".join(label for _, label, _ in present)
+    lines = [r"\begin{tabular}{l" + "r" * len(present) + "}", r"\toprule",
+             r"Condition & " + head + r" \\", r"\midrule"]
+    for c, label in W2_ORDER:
+        cells = [f"{stats[mid, c][0]:.2f} [{stats[mid, c][1]:.2f}, {stats[mid, c][2]:.2f}]" for mid, _, _ in present]
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("w2", lines)
 
-    fig, ax = plt.subplots(figsize=(3.3, 2.0))
+    fig, ax = plt.subplots(figsize=(6.75, 1.95))
     style(ax)
-    xs = range(len(W2_ORDER))
-    vals = [stats[c][0] for c, _ in W2_ORDER]
-    errs = [[stats[c][0] - stats[c][1] for c, _ in W2_ORDER], [stats[c][2] - stats[c][0] for c, _ in W2_ORDER]]
-    colors = [C[0] if c in ("C3", "C3M") else ("#9b9a93" if c in ("C1", "C1M", "C2") else C[1]) for c, _ in W2_ORDER]
-    ax.bar(xs, vals, width=0.62, color=colors, edgecolor="white", linewidth=1.2)
-    ax.errorbar(xs, vals, yerr=errs, fmt="none", ecolor=INK, elinewidth=0.7, capsize=2)
-    for x, (c, _) in zip(xs, W2_ORDER):
-        ax.text(x, stats[c][2] + 0.03, f"{stats[c][0]:.2f}", ha="center", va="bottom", fontsize=6.5, color=INK)
-    ax.set_xticks(list(xs), [c for c, _ in W2_ORDER])
-    ax.set_ylim(0, 1.18)
+    w = 0.8 / len(present)
+    for j, (mid, label, _) in enumerate(present):
+        xs = [i + (j - (len(present) - 1) / 2) * w for i in range(len(W2_ORDER))]
+        vals = [stats[mid, c][0] for c, _ in W2_ORDER]
+        errs = [[stats[mid, c][0] - stats[mid, c][1] for c, _ in W2_ORDER],
+                [stats[mid, c][2] - stats[mid, c][0] for c, _ in W2_ORDER]]
+        ax.bar(xs, vals, width=w, color=C[j], edgecolor="white", linewidth=1.0, label=label)
+        ax.errorbar(xs, vals, yerr=errs, fmt="none", ecolor=INK, elinewidth=0.6, capsize=1.5)
+    ax.set_xticks(range(len(W2_ORDER)), [c for c, _ in W2_ORDER])
+    ax.set_ylim(0, 1.05)
     ax.set_ylabel("All 5 rules followed", fontsize=7, color=INK)
+    ax.legend(fontsize=6.5, frameon=False, loc="upper left", ncol=len(present))
     fig.tight_layout(pad=0.3)
     fig.savefig(OUT / "figures" / "w2_skills.pdf")
     plt.close(fig)
@@ -178,118 +233,142 @@ def w2():
 
 # ---------------------------------------------------------------- W3-W6 (injection)
 def injection():
-    agent = load("w5_*.jsonl") + [r for r in load("w3_*.jsonl") if r["cond"] == "T3G" and not r["defended"]]
-    defended = [r for r in load("w3_*.jsonl") if r["defended"]]
+    w3 = load("w3_*.jsonl")
+    agent = load("w5_*.jsonl") + [r for r in w3 if r["cond"] in ("T2", "T3G") and not r["defended"]]
+    defended = [r for r in w3 if r["defended"]]
     rag = load("w6_*.jsonl")
     cl = lambda r: (r["tag"], r["doc"])  # noqa: E731
     key = lambda r: (r["tag"], r["item"], r["seed"])  # noqa: E731
     inj = lambda rows: [r for r in rows if r["injection"]]  # noqa: E731
 
-    def rate(rows, model, cond, field="complied", injected=True):
-        rs = [r for r in rows if r["model"] == model and r["cond"] == cond and bool(r["injection"]) == injected]
-        return mean(float(r[field]) for r in rs)
+    def sel(rows, mid, cond, injected=True, kind=None):
+        return [r for r in rows if r["model"] == mid and r["cond"] == cond and bool(r["injection"]) == injected
+                and (kind is None or r["injection"] == kind)]
 
-    # Table: agent layout
-    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
-             r"Model & T1 & T3 & T3G & T1$'$ & T3B15 & $\Delta$ T3$-$T1 [95\% CI] \\", r"\midrule"]
-    for mid, label in MODELS:
-        rs = [r for r in agent if r["model"] == mid]
-        dd = fmt_ci(paired(inj(rs), "T3", "T1", key, "complied", cl), signed=True)
-        lines.append(f"{label} & " + " & ".join(f"{rate(agent, mid, c):.2f}" for c in ("T1", "T3", "T3G", "T1M", "T3B15"))
-                     + f" & {dd} \\\\")
-    lines += [r"\bottomrule", r"\end{tabular}"]
-    (OUT / "tables" / "agent_injection.tex").write_text("\n".join(lines) + "\n")
+    def rate(rows, mid, cond, field="complied", injected=True, kind=None):
+        return mean(float(r[field]) for r in sel(rows, mid, cond, injected, kind))
 
-    # Table: mechanism + mitigation deltas
-    lines = [r"\begin{tabular}{lrrr}", r"\toprule",
-             r"Contrast & Qwen3-4B & Qwen3-8B & Llama-3.2-3B \\", r"\midrule"]
-    for a, b, label in [("T3", "T1M", r"T3 $-$ T1$'$ (RoPE shift only)"),
-                        ("T3B15", "T3", r"T3B15 $-$ T3 (15\% recompute)"),
-                        ("T3B15", "T1", r"T3B15 $-$ T1 (residual)"),
-                        ("T3F16", "T3", r"T3F16 $-$ T3 (first 16 recomputed)"),
-                        ("T3L16", "T3", r"T3L16 $-$ T3 (last 16 recomputed)")]:
-        cells = [fmt_ci(paired(inj([r for r in agent if r["model"] == mid]), a, b, key, "complied", cl), signed=True)
-                 for mid, _ in MODELS]
+    conds = ["T1", "T2", "T3", "T3G", "T1M"]
+    lines = [r"\begin{tabular}{l" + "r" * (len(conds) + 2) + "}", r"\toprule",
+             r"& \multicolumn{5}{c}{Plain system prompt} & \multicolumn{2}{c}{Defended prompt} \\",
+             r"\cmidrule(lr){2-6}\cmidrule(lr){7-8}",
+             r"Model & T1 & T2 & T3 & T3G & T1$'$ & T1 & T3 \\", r"\midrule"]
+    for mid, label, _ in MODELS:
+        cells = [f"{rate(agent, mid, c):.2f}" for c in conds] + [f"{rate(defended, mid, c):.2f}" for c in ("T1", "T3")]
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
-    (OUT / "tables" / "mechanism.tex").write_text("\n".join(lines) + "\n")
+    write_table("agent_injection", lines)
 
-    # Table: RAG layout
-    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
-             r"& \multicolumn{3}{c}{Injection compliance} & \multicolumn{3}{c}{Clean accuracy} \\",
-             r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
-             r"Model & R1 & R3 & R3B15 & R1 & R3 & R3B15 \\", r"\midrule"]
-    for mid, label in MODELS:
-        lines.append(f"{label} & " + " & ".join(f"{rate(rag, mid, c):.2f}" for c in ("R1", "R3", "R3B15")) + " & "
-                     + " & ".join(f"{rate(rag, mid, c, 'correct', injected=False):.2f}" for c in ("R1", "R3", "R3B15"))
-                     + r" \\")
+    lines = [r"\begin{tabular}{lccc}", r"\toprule", r"Model & override & append & refuse \\", r"\midrule"]
+    for mid, label, _ in MODELS:
+        cells = [f"{rate(agent, mid, 'T1', kind=k):.2f} $\\rightarrow$ {rate(agent, mid, 'T3', kind=k):.2f}"
+                 for k in ("override", "append", "refuse")]
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
-    (OUT / "tables" / "rag.tex").write_text("\n".join(lines) + "\n")
+    write_table("pertype", lines)
 
-    # macros
-    names = {"Qwen/Qwen3-4B": "Four", "Qwen/Qwen3-8B": "Eight", "mlx-community/Llama-3.2-3B-Instruct": "Llama"}
-    for mid, n in names.items():
+    contrasts = [("T3", "T1", r"T3 $-$ T1 (pack vs text)"),
+                 ("T3G", "T1", r"T3G $-$ T1 (conversation-shaped prelude)"),
+                 ("T3", "T1M", r"T3 $-$ T1$'$ (position shift)"),
+                 ("T3F16", "T3", r"T3F16 $-$ T3 (first 16 recomputed)"),
+                 ("T3L16", "T3", r"T3L16 $-$ T3 (last 16 recomputed)"),
+                 ("T3R15", "T3", r"T3R15 $-$ T3 (random 15\%)"),
+                 ("T3B15", "T3", r"T3B15 $-$ T3 (deviation 15\%)"),
+                 ("T3B15", "T3R15", r"T3B15 $-$ T3R15 (deviation vs random)"),
+                 ("T3B15", "T1", r"T3B15 $-$ T1 (residual)")]
+    lines = [r"\begin{tabular}{lrrr}", r"\toprule", r"Contrast & Qwen3-4B & Qwen3-8B & Llama-3.2-3B \\", r"\midrule"]
+    for a, b, label in contrasts:
+        cells = [fmt_ci(paired(inj([r for r in agent if r["model"] == mid]), a, b, key, "complied", cl), signed=True)
+                 for mid, _, _ in MODELS]
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("mechanism", lines)
+
+    rconds = ("R1", "R3", "R3N", "R3B15")
+    lines = [r"\begin{tabular}{l" + "r" * 8 + "}", r"\toprule",
+             r"& \multicolumn{4}{c}{Injection compliance} & \multicolumn{4}{c}{Clean accuracy} \\",
+             r"\cmidrule(lr){2-5}\cmidrule(lr){6-9}",
+             r"Model & R1 & R3 & R3N & R3B15 & R1 & R3 & R3N & R3B15 \\", r"\midrule"]
+    for mid, label, _ in MODELS:
+        lines.append(f"{label} & " + " & ".join(f"{rate(rag, mid, c):.2f}" for c in rconds) + " & "
+                     + " & ".join(f"{rate(rag, mid, c, 'correct', injected=False):.2f}" for c in rconds) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("rag", lines)
+
+    for mid, _, n in MODELS:
         rs = inj([r for r in agent if r["model"] == mid])
+        rr = inj([r for r in rag if r["model"] == mid])
         m(f"InjTone{n}", f"{rate(agent, mid, 'T1'):.2f}")
         m(f"InjTthree{n}", f"{rate(agent, mid, 'T3'):.2f}")
         m(f"InjD{n}", fmt_ci(paired(rs, "T3", "T1", key, "complied", cl), signed=True))
+        m(f"InjDG{n}", fmt_ci(paired(rs, "T3G", "T1", key, "complied", cl), signed=True))
+        m(f"InjDMask{n}", fmt_ci(paired(rs, "T3", "T1M", key, "complied", cl), signed=True))
         m(f"InjResid{n}", fmt_ci(paired(rs, "T3B15", "T1", key, "complied", cl), signed=True))
-        ov = lambda c: mean(r["complied"] for r in rs if r["cond"] == c and r["injection"] == "override")  # noqa: E731
-        m(f"InjOvTone{n}", pct(ov("T1")))
-        m(f"InjOvTthree{n}", pct(ov("T3")))
-        rr = inj([r for r in rag if r["model"] == mid])
+        m(f"InjOvTone{n}", f"{rate(agent, mid, 'T1', kind='override'):.2f}")
+        m(f"InjOvTthree{n}", f"{rate(agent, mid, 'T3', kind='override'):.2f}")
+        m(f"InjOvTthreeG{n}", f"{rate(agent, mid, 'T3G', kind='override'):.2f}")
+        m(f"InjDefTone{n}", f"{rate(defended, mid, 'T1'):.2f}")
+        m(f"InjDefTthree{n}", f"{rate(defended, mid, 'T3'):.2f}")
         m(f"RagD{n}", fmt_ci(paired(rr, "R3", "R1", key, "complied", cl), signed=True))
         m(f"RagDB{n}", fmt_ci(paired(rr, "R3B15", "R1", key, "complied", cl), signed=True))
-        dr = inj([r for r in defended if r["model"] == mid])
-        m(f"InjDefTthree{n}", f"{mean(r['complied'] for r in dr if r['cond'] == 'T3'):.2f}")
-        m(f"CleanTthree{n}", f"{rate(agent, mid, 'T3', 'correct', injected=False):.2f}")
-    shares = [(rate(agent, mid, "T3") - rate(agent, mid, "T3B15")) / (rate(agent, mid, "T3") - rate(agent, mid, "T1"))
-              for mid, _ in MODELS]
-    m("MitigShareRange", f"{100 * min(shares):.0f}--{100 * max(shares):.0f}")
+        m(f"RagNinj{n}", str(len(sel(rag, mid, "R1"))))
+    n_inj = len(sel(agent, "Qwen/Qwen3-8B", "T1"))
+    n_ov = len(sel(agent, "Qwen/Qwen3-8B", "T1", kind="override"))
+    m("InjNtrials", str(n_inj))
+    m("InjNtrialsOverride", str(n_ov))
+    m("InjZeroUpper", f"{100 * upper95(n_inj):.1f}")
+    m("InjZeroUpperOverride", f"{100 * upper95(n_ov):.1f}")
     m("InjNitems", str(len({(r["tag"], r["item"]) for r in agent if r["model"] == MODELS[0][0]})))
+    m("InjNinjected", str(len({(r["tag"], r["item"]) for r in inj(agent) if r["model"] == MODELS[0][0]})))
     m("InjNdocs", str(len({cl(r) for r in agent if r["model"] == MODELS[0][0]})))
+    m("FracBlend", f"{mean(r['recompute_fraction'] for r in agent if r['cond'] == 'T3B15'):.2f}")
+    m("FracRandom", f"{mean(r['recompute_fraction'] for r in agent if r['cond'] == 'T3R15'):.2f}")
+    shares = [(rate(agent, mid, "T3") - rate(agent, mid, "T3B15")) / (rate(agent, mid, "T3") - rate(agent, mid, "T1"))
+              for mid, _, _ in MODELS]
+    m("MitigShareRange", f"{100 * min(shares):.0f}--{100 * max(shares):.0f}")
+    m("CleanAccMin", f"{min(rate(agent, mid, c, 'correct', injected=False) for mid, _, _ in MODELS for c in ('T1', 'T3')):.2f}")
+    accs = sorted(rate(rag, mid, "R3N", "correct", injected=False) for mid, _, _ in MODELS)
+    m("RagRthreeNAccRange", f"{accs[0]:.2f}--{accs[-1]:.2f}")
 
-    # Figure: two panels, grouped by model
-    fig, axes = plt.subplots(1, 2, figsize=(6.75, 2.15), gridspec_kw={"width_ratios": [4, 3]}, sharey=True)
-    panels = [(axes[0], agent, [("T1", "T1 text"), ("T1M", "T1$'$ text, masked"), ("T3", "T3 KV pack"),
-                                ("T3B15", "T3 + 15% recompute")], "Agent layout: document after the question"),
-              (axes[1], rag, [("R1", "R1 full prefill"), ("R3", "R3 chunk packs"), ("R3B15", "R3 + 15% recompute")],
+    roles = {"text": C[0], "pack": C[1], "recompute": C[2], "masked": C[3]}
+    fig, axes = plt.subplots(1, 2, figsize=(6.75, 2.2), gridspec_kw={"width_ratios": [4, 3]}, sharey=True)
+    panels = [(axes[0], agent, [("T1", "T1 text", "text"), ("T1M", "T1$'$ text, masked", "masked"),
+                                ("T3", "T3 pack", "pack"), ("T3B15", "T3B15 pack + 15% recompute", "recompute")],
+               "Agent layout: document after the question"),
+              (axes[1], rag, [("R1", "R1 full prefill", "text"), ("R3", "R3 chunk packs", "pack"),
+                              ("R3B15", "R3B15 + 15% recompute", "recompute")],
                "RAG layout: documents before the question")]
-    for ax, rows, conds, title in panels:
+    for ax, rows, conds_, title in panels:
         style(ax)
-        w = 0.8 / len(conds)
-        for j, (c, label) in enumerate(conds):
-            xs = [i + (j - (len(conds) - 1) / 2) * w for i in range(len(MODELS))]
-            vals = [rate(rows, mid, c) for mid, _ in MODELS]
-            ax.bar(xs, vals, width=w, color=C[j], edgecolor="white", linewidth=1.0, label=label)
+        w = 0.8 / len(conds_)
+        for j, (c, label, role) in enumerate(conds_):
+            xs = [i + (j - (len(conds_) - 1) / 2) * w for i in range(len(MODELS))]
+            stats = [ci([(cl(r), float(r["complied"])) for r in sel(rows, mid, c)]) for mid, _, _ in MODELS]
+            vals = [s[0] for s in stats]
+            ax.bar(xs, vals, width=w, color=roles[role], edgecolor="white", linewidth=1.0, label=label)
+            ax.errorbar(xs, vals, yerr=[[s[0] - s[1] for s in stats], [s[2] - s[0] for s in stats]],
+                        fmt="none", ecolor=INK, elinewidth=0.6, capsize=1.5)
             for x, v in zip(xs, vals):
-                ax.text(x, v + 0.015, f"{v:.2f}", ha="center", va="bottom", fontsize=5.5, color=MUTED)
-        ax.set_xticks(range(len(MODELS)), [l for _, l in MODELS])
+                if v == 0:
+                    ax.plot([x - w / 2.4, x + w / 2.4], [0.004, 0.004], color=roles[role], linewidth=1.6)
+                    ax.text(x, 0.012, "0", ha="center", va="bottom", fontsize=5.5, color=MUTED)
+        ax.set_xticks(range(len(MODELS)), [l for _, l, _ in MODELS])
         ax.set_title(title, fontsize=7.5, color=INK, loc="left")
         ax.legend(fontsize=6, frameon=False, loc="upper right", handlelength=1.2)
     axes[0].set_ylabel("Injection compliance", fontsize=7, color=INK)
-    axes[0].set_ylim(0, 0.7)
+    axes[0].set_ylim(0, 0.72)
     fig.tight_layout(pad=0.3, w_pad=1.0)
     fig.savefig(OUT / "figures" / "injection.pdf")
     plt.close(fig)
-
-
-def selection():
-    rows = load("selection_Qwen--Qwen3-4B_*.jsonl")
-    by = defaultdict(list)
-    for r in rows:
-        by[r["n"]].append(r["correct"])
-    m("SelAccFifty", f"{mean(by[50]):.2f}")
-    m("SelAccHundred", f"{mean(by[100]):.2f}")
 
 
 def main():
     (OUT / "figures").mkdir(parents=True, exist_ok=True)
     (OUT / "tables").mkdir(parents=True, exist_ok=True)
     pilot()
+    w1()
     w2()
     injection()
-    selection()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))
