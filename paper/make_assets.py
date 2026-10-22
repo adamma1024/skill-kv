@@ -36,6 +36,8 @@ def load(pattern):
 
 
 def m(name, value):
+    if not name.isalpha():
+        raise ValueError(f"LaTeX macro names must be letters only: {name!r}")
     macros[name] = value
 
 
@@ -411,6 +413,7 @@ def scale_natural():
             m(f"Scale{kind}Tone{tag}", f"{rate(rs, 'T1'):.2f}")
             m(f"Scale{kind}Tthree{tag}", f"{rate(rs, 'T3'):.2f}")
             m(f"Scale{kind}DMask{tag}", fmt_ci(paired(rs, "T3", "T1M", key, "complied", cl), signed=True))
+            m(f"Scale{kind}DMaskText{tag}", fmt_ci(paired(rs, "T1M", "T1", key, "complied", cl), signed=True))
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("scale", lines)
@@ -455,6 +458,7 @@ def scale_natural():
             v, lo, hi = ci(paired(rs, c, "T1", key, "complied", cl))
             xs.append(x); ys.append(v); los.append(v - lo); his.append(hi - v)
             cells.append(f"{num(v, True)} [{num(lo)}, {num(hi)}]")
+            m(f"Sweep{'Bzero' if c == 'T3' else c.replace('T3B', 'B').replace('15', 'fifteen').replace('30', 'thirty').replace('50', 'fifty')}{tag}", cells[-1])
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
         ax.errorbar(xs, ys, yerr=[los, his], color=C[j % 4], marker="o", markersize=3.5, linewidth=1.5,
                     elinewidth=0.6, capsize=1.5, label=label)
