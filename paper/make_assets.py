@@ -16,6 +16,8 @@ from statistics import mean, median
 import matplotlib
 
 matplotlib.use("Agg")
+# embed TrueType (Type 42) fonts: arXiv and journals reject or flag Type 3 bitmap fonts
+matplotlib.rcParams.update({"pdf.fonttype": 42, "ps.fonttype": 42})
 import matplotlib.pyplot as plt  # noqa: E402
 
 from skillkv.stats import boot_ci, boot_ci2, holm, perm_test  # noqa: E402
@@ -113,6 +115,7 @@ def pilot():
     write_table("pilot", lines)
     kls = [r[8] for r in rows]
     m("PilotKLRange", f"{min(kls):.3f}--{max(kls):.3f}")
+    m("PilotKLExact", f"{max(r[9] for r in rows):.3f}")
     m("PilotSpeedupOne", f"{rows[0][1]:.1f}")
     m("PilotSpeedupFour", f"{rows[1][1]:.1f}")
     m("PilotKBFour", f"{rows[1][7]:.0f}")
@@ -239,7 +242,8 @@ def w2():
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("w2", lines)
 
-    fig, ax = plt.subplots(figsize=(6.75, 1.95))
+    fig, ax = plt.subplots(figsize=(6.5, 2.1))
+    hatches = ["", "////", ".."]  # model identity is not carried by colour alone
     style(ax)
     w = 0.8 / len(present)
     for j, (mid, label, _) in enumerate(present):
@@ -247,16 +251,16 @@ def w2():
         vals = [stats[mid, c][0] for c, _ in W2_ORDER]
         errs = [[stats[mid, c][0] - stats[mid, c][1] for c, _ in W2_ORDER],
                 [stats[mid, c][2] - stats[mid, c][0] for c, _ in W2_ORDER]]
-        ax.bar(xs, vals, width=w, color=C[j], edgecolor="white", linewidth=1.0, label=label)
+        ax.bar(xs, vals, width=w, color=C[j], edgecolor="white", linewidth=1.0, label=label, hatch=hatches[j % 3])
         ax.errorbar(xs, vals, yerr=errs, fmt="none", ecolor=INK, elinewidth=0.6, capsize=1.5)
         for x, v in zip(xs, vals):
             if v == 0:
                 ax.plot([x - w / 2.4, x + w / 2.4], [0.006, 0.006], color=C[j], linewidth=1.6)
-                ax.text(x, 0.02, "0", ha="center", va="bottom", fontsize=5.5, color=MUTED)
+                ax.text(x, 0.02, "0", ha="center", va="bottom", fontsize=7, color=MUTED)
     ax.set_xticks(range(len(W2_ORDER)), [c for c, _ in W2_ORDER])
     ax.set_ylim(0, 1.05)
     ax.set_ylabel("All 5 rules followed", fontsize=7, color=INK)
-    ax.legend(fontsize=6.5, frameon=False, loc="upper left", ncol=len(present))
+    ax.legend(fontsize=7, frameon=False, loc="upper left", ncol=len(present))
     fig.tight_layout(pad=0.3)
     fig.savefig(OUT / "figures" / "w2_skills.pdf")
     plt.close(fig)
@@ -354,6 +358,7 @@ def injection():
     n_ov = len(sel(agent, "Qwen/Qwen3-8B", "T1", kind="override"))
     m("InjNtrials", str(n_inj))
     m("InjNtrialsOverride", str(n_ov))
+    m("InjNtrialsType", str(n_ov))
     m("InjZeroUpper", f"{100 * upper95(n_inj):.1f}")
     m("InjNinjected", str(len({(r["tag"], r["item"]) for r in inj(agent) if r["model"] == MODELS[0][0]})))
     m("InjNdocs", str(len({cl(r) for r in agent if r["model"] == MODELS[0][0]})))
@@ -415,6 +420,7 @@ def scale_natural():
             d = fmt_ci(paired(rs, "T3", "T1", key, "complied", cl), signed=True)
             cells.append(d)
             m(f"Scale{kind}D{tag}", d)
+            m(f"Scale{kind}DPt{tag}", num(mean(v for _, v in paired(rs, "T3", "T1", key, "complied", cl)), True))
             m(f"Scale{kind}Tone{tag}", f"{rate(rs, 'T1'):.2f}")
             m(f"Scale{kind}Tthree{tag}", f"{rate(rs, 'T3'):.2f}")
             m(f"Scale{kind}DMask{tag}", fmt_ci(paired(rs, "T3", "T1M", key, "complied", cl), signed=True))
@@ -444,8 +450,15 @@ def scale_natural():
     m("NatAccNdrop", str(n_drop))
     m("NatAccNmodels", str(n_acc))
     m("NatNdocs", str(len({r["doc"] for r in nat})))
+    from skillkv.inject import make_natural_items
+    words = [len(it.doc.split()) for it in make_natural_items(ROOT / "data" / "natural_docs.json") if not it.injection]
+    m("NatWordsMin", str(min(words)))
+    m("NatWordsMax", str(max(words)))
     m("NatNinjected", str(len({(r["tag"], r["item"]) for r in nat if r["injection"]
                                 and r["model"] == MODELS[0][0]})))
+    nat_t1 = [r for r in nat if r["injection"] and r["model"] == MODELS[0][0] and r["cond"] == "T1"]
+    m("NatNtrials", str(len(nat_t1)))
+    m("NatNtrialsType", str(len([r for r in nat_t1 if r["injection"] == "override"])))
 
     # recompute dose-response (synthetic documents)
     fig, ax = plt.subplots(figsize=(3.3, 2.2))
@@ -484,8 +497,8 @@ def scale_natural():
     write_table("sweep", lines)
     ax.axhline(0, color=MUTED, linewidth=0.6)
     ax.set_xlabel("Fraction of prefill compute spent on recompute", fontsize=7, color=INK)
-    ax.set_ylabel("Excess compliance over text (T3x$-$T1)", fontsize=7, color=INK)
-    ax.legend(fontsize=5.5, frameon=False)
+    ax.set_ylabel("Excess compliance over plain prefill (T3x$-$T1)", fontsize=7, color=INK)
+    ax.legend(fontsize=7, frameon=False)
     fig.tight_layout(pad=0.3)
     fig.savefig(OUT / "figures" / "sweep.pdf")
     plt.close(fig)
@@ -508,6 +521,7 @@ def ia_rows():
     seeds = {s for s in {r["seed"] for r in rows} if all(count[mid, s] == n_full for mid in models)}
     rows = [r for r in rows if r["seed"] in seeds]
     m("IaNseeds", {1: "one", 2: "two", 3: "three"}[len(seeds)])
+    m("IaNseedsText", "one sampled response" if len(seeds) == 1 else f"{len(seeds)} sampled responses")
     for r in rows:
         c = cases[r["kind"], r["index"]]
         r["attack"], r["user"], r["complied"] = c.attacker_instruction, c.user_instruction, r["attack_success"]
@@ -706,7 +720,7 @@ def attention():
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("attention", lines)
 
-    fig, axes = plt.subplots(1, len(present), figsize=(6.75, 1.9), sharey=True)
+    fig, axes = plt.subplots(1, len(present), figsize=(6.5, 2.1), sharey=True)
     for ax, (mid, label, _) in zip(axes, present):
         style(ax)
         for j, source in enumerate(("syn", "nat")):
@@ -724,10 +738,11 @@ def attention():
                     label="synthetic" if source == "syn" else "natural")
         ax.axhline(0, color=MUTED, linewidth=0.6)
         ax.set_title(label, fontsize=7, color=INK)
-        ax.set_xlabel("Relative depth", fontsize=6.5, color=INK)
-    axes[0].set_ylabel("T3$-$T1 attention to\ninjected span (pp)", fontsize=6.5, color=INK)
-    axes[0].legend(fontsize=6, frameon=False)
-    fig.tight_layout(pad=0.3, w_pad=0.6)
+        ax.set_xlabel("Relative depth", fontsize=7, color=INK)
+    axes[0].set_ylabel("T3$-$T1 attention to\ninjected span (pp)", fontsize=7, color=INK)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, fontsize=7, frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(pad=0.3, w_pad=0.6, rect=(0, 0, 1, 0.9))
     fig.savefig(OUT / "figures" / "attention_layers.pdf")
     plt.close(fig)
 
@@ -947,6 +962,19 @@ def cost():
     m("FracBfifteen", f"{100 * mean(fr):.0f}")
     fr = [r["recompute_fraction"] for r in syn if r["cond"] == "T3B50" and r.get("recompute_fraction") is not None]
     m("FracBfifty", f"{100 * mean(fr):.0f}")
+    fr = [r["recompute_fraction"] for r in syn if r["cond"] == "T3B30" and r.get("recompute_fraction") is not None]
+    m("FracBthirty", f"{100 * mean(fr):.0f}")
+    # time-to-first-token ratios quoted in the text, over the models with a full sweep
+    t = defaultdict(dict)
+    for mid in {r["model"] for r in syn}:
+        rs = [r for r in syn if r["model"] == mid]
+        if all(complete(rs, c) for c in ("T1", "T3", "T3B50")):
+            for c in ("T1", "T3", "T3B50"):
+                t[mid][c] = median(r["ttft_s"] for r in rs if r["cond"] == c)
+    rb = [v["T3B50"] / v["T1"] for v in t.values()]
+    rp = [v["T3"] / v["T1"] for v in t.values()]
+    m("TtftRatioBfifty", f"{min(rb):.1f}--{max(rb):.1f}")
+    m("TtftRatioPack", f"{mean(rp):.2f}")
 
 
 def template():
@@ -1020,6 +1048,59 @@ def span_sizes():
         m(f"SpanCall{name}", f"{mean(len(L.tool_call(it.name)) for it in items):.0f}")
 
 
+def overview():
+    """Figure 1: the conditions as attention patterns (left) and synthetic-document compliance per model (right)."""
+    from matplotlib.patches import FancyArrowPatch, Rectangle
+    rows = [("T1", "T1", (True, True), False), ("T1Mreq", "T1$\\setminus$call", (True, False), False),
+            ("T1Mcall", "T1$\\setminus$user", (False, True), False), ("T1M", "T1$'$", (False, False), False),
+            ("T3", "T3 (pack)", (False, False), True)]
+    syn = [r for r in syn_rows() if r["injection"]]
+    models = [(mid, label, tag) for mid, label, tag in ALL_MODELS
+              if all(complete([r for r in syn if r["model"] == mid], c) for c, *_ in rows)]
+    ylim = (len(rows) - 0.5, -1.35)
+    fig = plt.figure(figsize=(6.5, 2.6))
+    axl = fig.add_axes([0.0, 0.14, 0.57, 0.84])
+    axr = fig.add_axes([0.61, 0.14, 0.38, 0.84])
+    blocks = [("system", 0.0, 1.3, "#e6e5e0"), ("user turn", 1.4, 1.6, "#cfe0f5"), ("tool call", 3.1, 1.0, "#cfe0f5"),
+              ("document", 4.2, 2.3, "#f6d9cc"), ("answer", 6.6, 0.9, "#e6e5e0")]
+    axl.set_xlim(-1.75, 7.6)
+    axl.set_ylim(*ylim)
+    axl.axis("off")
+    for name, x0, w, _ in blocks:
+        axl.text(x0 + w / 2, -0.95, name, ha="center", va="center", fontsize=7, color=INK)
+    axl.text(5.35, -0.62, "(with injection)", ha="center", va="center", fontsize=6.5, color=MUTED)
+    for i, (cond, label, (sees_user, sees_call), pack) in enumerate(rows):
+        axl.text(-1.7, i + 0.05, label, ha="left", va="center", fontsize=7.5, color=INK)
+        for name, x0, w, col in blocks:
+            hatch = "////" if (pack and name == "document") else None
+            axl.add_patch(Rectangle((x0, i - 0.13), w, 0.3, facecolor=col, edgecolor=MUTED, linewidth=0.5, hatch=hatch))
+        for target_x, ok in ((2.2, sees_user), (3.6, sees_call)):
+            axl.add_patch(FancyArrowPatch((4.45, i - 0.14), (target_x, i - 0.14), connectionstyle="arc3,rad=0.2",
+                                          arrowstyle="-|>", mutation_scale=6, linewidth=0.9 if ok else 0.7,
+                                          color=INK if ok else "#bdbcb6", linestyle="-" if ok else (0, (2, 1.5))))
+    axl.text(-1.7, len(rows) - 0.55, "solid arrow: document attends to it;  dashed: masked;  hatched: KV from a pack",
+             ha="left", va="top", fontsize=6.5, color=MUTED)
+    style(axr)
+    for k, (mid, label, tag) in enumerate(models):
+        rs = [r for r in syn if r["model"] == mid]
+        j = [t for _, _, t in ALL_MODELS].index(tag)
+        ys = [i + (k - (len(models) - 1) / 2) * 0.07 for i in range(len(rows))]
+        xs = [mean(float(r["complied"]) for r in rs if r["cond"] == c) for c, *_ in rows]
+        axr.plot(xs, ys, linestyle="none", marker=MARKERS[j], markersize=4, color=C[j], label=label)
+    axr.set_ylim(*ylim)
+    axr.set_yticks(range(len(rows)), ["" for _ in rows])
+    axr.tick_params(axis="y", length=0)
+    axr.set_xlim(-0.02, 0.82)
+    axr.set_xlabel("Injection compliance (synthetic documents)", fontsize=7, color=INK)
+    axr.tick_params(axis="x", labelsize=7)
+    axr.xaxis.grid(True, color=GRID, linewidth=0.6)
+    axr.yaxis.grid(True, color=GRID, linewidth=0.4)
+    axr.spines["left"].set_visible(False)
+    axr.legend(fontsize=6.5, frameon=False, ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.02), handletextpad=0.2,
+               columnspacing=0.6, borderaxespad=0.0)
+    fig.savefig(OUT / "figures" / "overview.pdf")
+    plt.close(fig)
+
 def main():
     (OUT / "figures").mkdir(parents=True, exist_ok=True)
     (OUT / "tables").mkdir(parents=True, exist_ok=True)
@@ -1040,6 +1121,7 @@ def main():
     template()
     glmm()
     span_sizes()
+    overview()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))

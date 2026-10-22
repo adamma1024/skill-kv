@@ -1,348 +1,547 @@
+% refs_verified.bib -- verified 2026-10-22 against arXiv API, Crossref, ACL Anthology,
+% PMLR, NeurIPS proceedings, MLSys proceedings, USENIX, ACM (via Crossref), CEUR-WS,
+% OpenReview search and ML Anthology. DBLP and Semantic Scholar were used where reachable
+% (DBLP returned a bot challenge / HTTP 429 and was not used directly).
+% Citation keys are unchanged from refs.bib.
+
 @inproceedings{gim2024promptcache,
-  title     = {Prompt Cache: Modular Attention Reuse for Low-Latency Inference},
-  author    = {Gim, In and Chen, Guojun and Lee, Seung-seob and Sarda, Nikhil and Khandelwal, Anurag and Zhong, Lin},
-  booktitle = {Proceedings of Machine Learning and Systems (MLSys)},
-  year      = {2024}
+  title         = {{Prompt Cache}: Modular Attention Reuse for Low-Latency Inference},
+  author        = {Gim, In and Chen, Guojun and Lee, Seung-seob and Sarda, Nikhil and Khandelwal, Anurag and Zhong, Lin},
+  booktitle     = {Proceedings of Machine Learning and Systems (MLSys)},
+  volume        = {6},
+  pages         = {325--338},
+  year          = {2024},
+  url           = {https://proceedings.mlsys.org/paper_files/paper/2024/hash/a66caa1703fe34705a4368c3014c1966-Abstract-Conference.html},
+  eprint        = {2311.04934},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2311.04934}
 }
 
 @inproceedings{zheng2024sglang,
-  title     = {{SGLang}: Efficient Execution of Structured Language Model Programs},
-  author    = {Zheng, Lianmin and others},
-  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
-  year      = {2024}
+  title         = {{SGLang}: Efficient Execution of Structured Language Model Programs},
+  author        = {Zheng, Lianmin and Yin, Liangsheng and Xie, Zhiqiang and Sun, Chuyue and Huang, Jeff and Yu, Cody Hao and Cao, Shiyi and Kozyrakis, Christos and Stoica, Ion and Gonzalez, Joseph E. and Barrett, Clark and Sheng, Ying},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume        = {37},
+  pages         = {62557--62583},
+  year          = {2024},
+  doi           = {10.52202/079017-2000},
+  eprint        = {2312.07104},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2312.07104}
 }
 
 @inproceedings{yao2025cacheblend,
-  title     = {{CacheBlend}: Fast Large Language Model Serving for {RAG} with Cached Knowledge Fusion},
-  author    = {Yao, Jiayi and Li, Hanchen and Liu, Yuhan and Ray, Siddhant and Cheng, Yihua and Zhang, Qizheng and Du, Kuntai and Lu, Shan and Jiang, Junchen},
-  booktitle = {Proceedings of the European Conference on Computer Systems (EuroSys)},
-  year      = {2025},
-  note      = {arXiv:2405.16444}
+  title         = {{CacheBlend}: Fast Large Language Model Serving for {RAG} with Cached Knowledge Fusion},
+  author        = {Yao, Jiayi and Li, Hanchen and Liu, Yuhan and Ray, Siddhant and Cheng, Yihua and Zhang, Qizheng and Du, Kuntai and Lu, Shan and Jiang, Junchen},
+  booktitle     = {Proceedings of the Twentieth European Conference on Computer Systems (EuroSys)},
+  pages         = {94--109},
+  publisher     = {ACM},
+  year          = {2025},
+  doi           = {10.1145/3689031.3696098},
+  eprint        = {2405.16444},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2405.16444}
 }
 
 @article{liu2025lmcache,
-  title   = {{LMCache}: An Efficient {KV} Cache Layer for Enterprise-Scale {LLM} Inference},
-  author  = {Liu, Yuhan and Cheng, Yihua and Yao, Jiayi and An, Yuwei and Chen, Xiaokun and Feng, Shaoting and Huang, Yuyang and Shen, Samuel and Zhang, Rui and Du, Kuntai and Jiang, Junchen},
-  journal = {arXiv preprint arXiv:2510.09665},
-  year    = {2025}
+  title         = {{LMCache}: An Efficient {KV} Cache Layer for Enterprise-Scale {LLM} Inference},
+  author        = {Liu, Yuhan and Cheng, Yihua and Yao, Jiayi and An, Yuwei and Chen, Xiaokun and Feng, Shaoting and Huang, Yuyang and Shen, Samuel and Zhang, Rui and Du, Kuntai and Jiang, Junchen},
+  journal       = {arXiv preprint arXiv:2510.09665},
+  year          = {2025},
+  eprint        = {2510.09665},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2510.09665}
 }
 
 @article{cheng2024kdn,
-  title   = {Do Large Language Models Need a Content Delivery Network?},
-  author  = {Cheng, Yihua and Du, Kuntai and Yao, Jiayi and Jiang, Junchen},
-  journal = {arXiv preprint arXiv:2409.13761},
-  year    = {2024}
+  title         = {Do Large Language Models Need a Content Delivery Network?},
+  author        = {Cheng, Yihua and Du, Kuntai and Yao, Jiayi and Jiang, Junchen},
+  journal       = {arXiv preprint arXiv:2409.13761},
+  year          = {2024},
+  eprint        = {2409.13761},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2409.13761}
 }
 
-@article{eyuboglu2025cartridges,
-  title   = {Cartridges: Lightweight and General-Purpose Long Context Representations via Self-Study},
-  author  = {Eyuboglu, Sabri and others},
-  journal = {arXiv preprint arXiv:2506.06266},
-  year    = {2025}
+@inproceedings{eyuboglu2026cartridges,
+  title         = {{Cartridges}: Lightweight and General-Purpose Long Context Representations via Self-Study},
+  author        = {Eyuboglu, Sabri and Ehrlich, Ryan Saul and Arora, Simran and Guha, Neel and Zinsley, Dylan and Liu, Emily Ruoyu and Rudra, Atri and Zou, James and Mirhoseini, Azalia and R{\'e}, Christopher},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  url           = {https://openreview.net/forum?id=0k5w8O0SNg},
+  eprint        = {2506.06266},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2506.06266}
 }
 
 @article{chen2026kvpacket,
-  title   = {{KV} Packet: Recomputation-Free Context-Independent {KV} Caching for {LLMs}},
-  author  = {Chen, Chuangtao and Zhang, Grace Li and Yin, Xunzhao and Zhuo, Cheng and Li, Bing and Schlichtmann, Ulf},
-  journal = {arXiv preprint arXiv:2604.13226},
-  year    = {2026}
+  title         = {{KV} Packet: Recomputation-Free Context-Independent {KV} Caching for {LLMs}},
+  author        = {Chen, Chuangtao and Zhang, Grace Li and Yin, Xunzhao and Zhuo, Cheng and Li, Bing and Schlichtmann, Ulf},
+  journal       = {arXiv preprint arXiv:2604.13226},
+  year          = {2026},
+  eprint        = {2604.13226},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2604.13226}
 }
 
 @article{li2026notes,
-  title   = {Models Take Notes at Prefill: {KV} Cache Can Be Editable and Composable},
-  author  = {Li, Bojie},
-  journal = {arXiv preprint arXiv:2606.17107},
-  year    = {2026}
+  title         = {Models Take Notes at Prefill: {KV} Cache Can Be Editable and Composable},
+  author        = {Li, Bojie},
+  journal       = {arXiv preprint arXiv:2606.17107},
+  year          = {2026},
+  eprint        = {2606.17107},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2606.17107}
 }
 
-@article{liu2024droidspeak,
-  title   = {{DroidSpeak}: {KV} Cache Sharing for Cross-{LLM} Communication and Multi-{LLM} Serving},
-  author  = {Liu, Yuhan and others},
-  journal = {arXiv preprint arXiv:2411.02820},
-  year    = {2024}
+% Published at NSDI '26 under a revised title. arXiv title (v4):
+% "DroidSpeak: KV Cache Sharing for Cross-LLM Communication and Multi-LLM Serving".
+@inproceedings{liu2026droidspeak,
+  title         = {{DroidSpeak}: {KV} Cache Sharing Across Fine-tuned Model Variants},
+  author        = {Liu, Yuhan and Huang, Yuyang and Yao, Jiayi and Feng, Shaoting and Gu, Zhuohan and Du, Kuntai and Li, Hanchen and Cheng, Yihua and Jiang, Junchen and Lu, Shan and Musuvathi, Madan and Choukse, Esha},
+  booktitle     = {Proceedings of the 23rd USENIX Symposium on Networked Systems Design and Implementation (NSDI)},
+  pages         = {319--338},
+  publisher     = {USENIX Association},
+  year          = {2026},
+  url           = {https://www.usenix.org/conference/nsdi26/presentation/liu-yuhan},
+  eprint        = {2411.02820},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2411.02820}
 }
 
-@inproceedings{fu2025c2c,
-  title     = {Cache-to-Cache: Direct Semantic Communication Between Large Language Models},
-  author    = {Fu, Tianyu and Min, Zihan and Zhang, Hanling and Yan, Jichao and Dai, Guohao and Ouyang, Wanli and Wang, Yu},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2026},
-  note      = {arXiv:2510.03215}
+@inproceedings{fu2026c2c,
+  title         = {{Cache-to-Cache}: Direct Semantic Communication Between Large Language Models},
+  author        = {Fu, Tianyu and Min, Zihan and Zhang, Hanling and Yan, Jichao and Dai, Guohao and Ouyang, Wanli and Wang, Yu},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  url           = {https://openreview.net/forum?id=LeatkxrBCi},
+  eprint        = {2510.03215},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2510.03215}
 }
 
 @article{zhang2026progressive,
-  title   = {Report: Progressive Disclosure of Agent Skills},
-  author  = {Zhang, Guilin and Zhao, Kai and Mudgal, Priyanka and Ammar, Waleed and Cui, Xiquan and Chu, Xu and Blanken, Alet},
-  journal = {arXiv preprint arXiv:2609.35692},
-  year    = {2026}
+  title         = {Report: Progressive Disclosure of Agent Skills},
+  author        = {Zhang, Guilin and Zhao, Kai and Mudgal, Priyanka and Ammar, Waleed and Cui, Xiquan and Chu, Xu and Blanken, Alet},
+  journal       = {arXiv preprint arXiv:2609.35692},
+  year          = {2026},
+  eprint        = {2609.35692},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2609.35692}
 }
 
 @article{nakasuji2026skillblocks,
-  title   = {Skill Blocks: How Should an Agent Load Its Skill? A Caching-Correct Comparison of Pre-load, On-Demand Tool-Loading, Progressive Disclosure, and Hybrid},
-  author  = {Nakasuji, Hironobu},
-  journal = {arXiv preprint arXiv:2608.14943},
-  year    = {2026}
+  title         = {{Skill Blocks}: How Should an Agent Load Its Skill? {A} Caching-Correct Comparison of Pre-load, On-Demand Tool-Loading, Progressive Disclosure, and Hybrid},
+  author        = {Nakasuji, Hironobu},
+  journal       = {arXiv preprint arXiv:2608.14943},
+  year          = {2026},
+  eprint        = {2608.14943},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2608.14943}
 }
 
 @article{shepard2026costs,
-  title   = {What It Costs to Compose, Rebuild, and Correct Precomputed Memory},
-  author  = {Shepard, Asa},
-  journal = {arXiv preprint arXiv:2608.30647},
-  year    = {2026}
+  title         = {What It Costs to Compose, Rebuild, and Correct Precomputed Memory},
+  author        = {Shepard, Asa},
+  journal       = {arXiv preprint arXiv:2608.30647},
+  year          = {2026},
+  eprint        = {2608.30647},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2608.30647}
 }
 
 @article{rakotonirina2026where,
-  title   = {Where Should a Document Live: Context, Representations, or Parameters?},
-  author  = {Carraz Rakotonirina, Nathana{\"e}l and Hardalov, Momchil and Iglesias, Gonzalo and de Gispert, Adri{\`a}},
-  journal = {arXiv preprint arXiv:2609.17346},
-  year    = {2026}
+  title         = {Where Should a Document Live: Context, Representations, or Parameters?},
+  author        = {Rakotonirina, Nathana{\"e}l Carraz and Hardalov, Momchil and Iglesias, Gonzalo and de Gispert, Adri{\`a}},
+  journal       = {arXiv preprint arXiv:2609.17346},
+  year          = {2026},
+  eprint        = {2609.17346},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2609.17346}
 }
 
 @inproceedings{greshake2023indirect,
-  title     = {Not What You've Signed Up For: Compromising Real-World {LLM}-Integrated Applications with Indirect Prompt Injection},
-  author    = {Greshake, Kai and Abdelnabi, Sahar and Mishra, Shailesh and Endres, Christoph and Holz, Thorsten and Fritz, Mario},
-  booktitle = {Proceedings of the ACM Workshop on Artificial Intelligence and Security (AISec)},
-  year      = {2023},
-  note      = {arXiv:2302.12173}
+  title         = {Not What You've Signed Up For: Compromising Real-World {LLM}-Integrated Applications with Indirect Prompt Injection},
+  author        = {Greshake, Kai and Abdelnabi, Sahar and Mishra, Shailesh and Endres, Christoph and Holz, Thorsten and Fritz, Mario},
+  booktitle     = {Proceedings of the 16th ACM Workshop on Artificial Intelligence and Security (AISec)},
+  pages         = {79--90},
+  publisher     = {ACM},
+  year          = {2023},
+  doi           = {10.1145/3605764.3623985},
+  eprint        = {2302.12173},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2302.12173}
 }
 
 @article{wallace2024hierarchy,
-  title   = {The Instruction Hierarchy: Training {LLMs} to Prioritize Privileged Instructions},
-  author  = {Wallace, Eric and Xiao, Kai and Leike, Reimar and Weng, Lilian and Heidecke, Johannes and Beutel, Alex},
-  journal = {arXiv preprint arXiv:2404.13208},
-  year    = {2024}
+  title         = {The Instruction Hierarchy: Training {LLMs} to Prioritize Privileged Instructions},
+  author        = {Wallace, Eric and Xiao, Kai and Leike, Reimar and Weng, Lilian and Heidecke, Johannes and Beutel, Alex},
+  journal       = {arXiv preprint arXiv:2404.13208},
+  year          = {2024},
+  eprint        = {2404.13208},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2404.13208}
 }
 
 @article{yang2025qwen3,
-  title   = {{Qwen3} Technical Report},
-  author  = {{Qwen Team}},
-  journal = {arXiv preprint arXiv:2505.09388},
-  year    = {2025}
+  title         = {{Qwen3} Technical Report},
+  author        = {Yang, An and others},
+  journal       = {arXiv preprint arXiv:2505.09388},
+  year          = {2025},
+  eprint        = {2505.09388},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2505.09388}
 }
 
 @article{grattafiori2024llama3,
-  title   = {The {Llama} 3 Herd of Models},
-  author  = {Grattafiori, Aaron and others},
-  journal = {arXiv preprint arXiv:2407.21783},
-  year    = {2024}
+  title         = {The {Llama} 3 Herd of Models},
+  author        = {Grattafiori, Aaron and others},
+  journal       = {arXiv preprint arXiv:2407.21783},
+  year          = {2024},
+  eprint        = {2407.21783},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2407.21783}
 }
 
 @misc{hannun2023mlx,
-  title        = {{MLX}: Efficient and Flexible Machine Learning on {Apple} Silicon},
-  author       = {Hannun, Awni and Digani, Jagrit and Katharopoulos, Angelos and Collobert, Ronan},
-  year         = {2023},
-  howpublished = {\url{https://github.com/ml-explore/mlx}}
+  title         = {{MLX}: Efficient and Flexible Machine Learning on {Apple} Silicon},
+  author        = {Hannun, Awni and Digani, Jagrit and Katharopoulos, Angelos and Collobert, Ronan},
+  year          = {2023},
+  howpublished  = {\url{https://github.com/ml-explore/mlx}}
 }
 
 @inproceedings{zhang2026hijackkv,
-  title     = {{HijackKV}: New Threat in Position-Independent {KV} Cache Reuse},
-  author    = {Zhang, Yichi and Wang, Zhiqi and Zhang, Huan and Yang, Yuchen},
-  booktitle = {Proceedings of the USENIX Security Symposium},
-  year      = {2026},
-  note      = {arXiv:2607.19957}
+  title         = {{HijackKV}: New Threat in Position-Independent {KV} Cache Reuse},
+  author        = {Zhang, Yichi and Wang, Zhiqi and Zhang, Huan and Yang, Yuchen},
+  booktitle     = {Proceedings of the 35th USENIX Security Symposium (USENIX Security)},
+  pages         = {4701--4720},
+  publisher     = {USENIX Association},
+  year          = {2026},
+  url           = {https://www.usenix.org/conference/usenixsecurity26/presentation/zhang-yichi},
+  eprint        = {2607.19957},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2607.19957}
 }
 
 @article{zhu2026r2ecap,
-  title   = {Stealthy Poisoning Attacks via Reused {KV} Cache of Reasoning},
-  author  = {Zhu, L. and Jung, Y. and Szyller, S.},
-  journal = {arXiv preprint arXiv:2610.22873},
-  year    = {2026}
+  title         = {Stealthy Poisoning Attacks via Reused {KV} Cache of Reasoning},
+  author        = {Zhu, L. and Jung, Y. and Szyller, S.},
+  journal       = {arXiv preprint arXiv:2610.22873},
+  year          = {2026},
+  eprint        = {2610.22873},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2610.22873}
 }
 
 @article{fang2026recache,
-  title   = {{ReCache}: Efficient {KV} Cache Reuse and Compression for Tool-Augmented {LLM} Agents},
-  author  = {Fang, Yichu and Wei, Sitong and Hu, Haozhe and Shen, Xiaoyu},
-  journal = {arXiv preprint arXiv:2608.19662},
-  year    = {2026}
+  title         = {{ReCache}: Efficient {KV} Cache Reuse and Compression for Tool-Augmented {LLM} Agents},
+  author        = {Fang, Yichu and Wei, Sitong and Hu, Haozhe and Shen, Xiaoyu},
+  journal       = {arXiv preprint arXiv:2608.19662},
+  year          = {2026},
+  eprint        = {2608.19662},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2608.19662}
 }
 
 @article{ganesh2025narrative,
-  title   = {Whose Narrative is it Anyway? A {KV} Cache Manipulation Attack},
-  author  = {Ganesh, Mukkesh and Iyer, Kaushik and Sankar Ananthan, Arun Baalaaji},
-  journal = {arXiv preprint arXiv:2511.12752},
-  year    = {2025}
+  title         = {Whose Narrative is it Anyway? {A} {KV} Cache Manipulation Attack},
+  author        = {Ganesh, Mukkesh and Iyer, Kaushik and Sankar Ananthan, Arun Baalaaji},
+  journal       = {arXiv preprint arXiv:2511.12752},
+  year          = {2025},
+  eprint        = {2511.12752},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2511.12752}
 }
 
 @article{cestola2026evaluating,
-  title   = {Evaluating the Accuracy of {KV} Cache Reuse Techniques},
-  author  = {Cestola, Samuel and Xia, Tianxiang and Zheng, Pengfei and Zheng, Weiyan and Wang, Bo and Zhao, Yi and Didona, Diego},
-  journal = {arXiv preprint arXiv:2609.31415},
-  year    = {2026}
+  title         = {Evaluating the Accuracy of {KV} Cache Reuse Techniques},
+  author        = {Cestola, Samuel and Xia, Tianxiang and Zheng, Pengfei and Zheng, Weiyan and Wang, Bo and Zhao, Yi and Didona, Diego},
+  journal       = {arXiv preprint arXiv:2609.31415},
+  year          = {2026},
+  eprint        = {2609.31415},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2609.31415}
 }
 
 @article{li2026hexis,
-  title   = {{HEXIS}: Compiling Agent Skills into Extended Finite State Machines},
-  author  = {Li, Minghao},
-  journal = {arXiv preprint arXiv:2609.30123},
-  year    = {2026}
+  title         = {{HEXIS}: Compiling Agent Skills into Extended Finite State Machines},
+  author        = {Li, Minghao},
+  journal       = {arXiv preprint arXiv:2609.30123},
+  year          = {2026},
+  eprint        = {2609.30123},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2609.30123}
 }
 
 @article{sun2026sidechannel,
-  title   = {Agent-Assisted Side-Channel Attacks on Non-Prefix {KV} Cache in {RAG}},
-  author  = {Sun, He and Liu, Shinan and Ma, Siyuan and Li, Junhao and Xiao, Mingjun and Jiang, Wenhao},
-  journal = {arXiv preprint arXiv:2606.21842},
-  year    = {2026}
+  title         = {Agent-Assisted Side-Channel Attacks on Non-Prefix {KV} Cache in {RAG}},
+  author        = {Sun, He and Liu, Shinan and Ma, Siyuan and Li, Junhao and Xiao, Mingjun and Jiang, Wenhao},
+  journal       = {arXiv preprint arXiv:2606.21842},
+  year          = {2026},
+  eprint        = {2606.21842},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2606.21842}
 }
 
 @inproceedings{ma2025blockattention,
-  title     = {Block-Attention for Efficient Prefilling},
-  author    = {Ma, Dongyang and Wang, Yan and Tian, Lan},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2025},
-  note      = {arXiv:2409.15355}
+  title         = {{Block-Attention} for Efficient Prefilling},
+  author        = {Ma, Dongyang and Wang, Yan and Lan, Tian},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  url           = {https://openreview.net/forum?id=7zNYY1E2fq},
+  eprint        = {2409.15355},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2409.15355}
 }
 
 @inproceedings{yang2025ape,
-  title     = {{APE}: Faster and Longer Context-Augmented Generation via Adaptive Parallel Encoding},
-  author    = {Yang, Xinyu and Chen, Tianqi and Chen, Beidi},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2025},
-  note      = {arXiv:2502.05431}
+  title         = {{APE}: Faster and Longer Context-Augmented Generation via Adaptive Parallel Encoding},
+  author        = {Yang, Xinyu and Chen, Tianqi and Chen, Beidi},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  url           = {https://openreview.net/forum?id=yUC8pU508S},
+  eprint        = {2502.05431},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2502.05431}
 }
 
-@article{hu2024epic,
-  title   = {{EPIC}: Efficient Position-Independent Caching for Serving Large Language Models},
-  author  = {Hu, Junhao and Huang, Wenrui and Wang, Weidong and Wang, Haoyi and Hu, Tiancheng and Zhang, Qin and Feng, Hao and others},
-  journal = {arXiv preprint arXiv:2410.15332},
-  year    = {2024}
+@inproceedings{hu2025epic,
+  title         = {{EPIC}: Efficient Position-Independent Caching for Serving Large Language Models},
+  author        = {Hu, Junhao and Huang, Wenrui and Wang, Weidong and Wang, Haoyi and Hu, Tiancheng and Zhang, Qin and Feng, Hao and Chen, Xusheng and Shan, Yizhou and Xie, Tao},
+  booktitle     = {Proceedings of the 42nd International Conference on Machine Learning (ICML)},
+  series        = {Proceedings of Machine Learning Research},
+  volume        = {267},
+  pages         = {24391--24402},
+  publisher     = {PMLR},
+  year          = {2025},
+  url           = {https://proceedings.mlr.press/v267/hu25j.html},
+  eprint        = {2410.15332},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2410.15332}
 }
 
-@article{lu2024turborag,
-  title   = {{TurboRAG}: Accelerating Retrieval-Augmented Generation with Precomputed {KV} Caches for Chunked Text},
-  author  = {Lu, Songshuo and Wang, Hua and Rong, Yutian and Chen, Zhi and Tang, Yaohua},
-  journal = {arXiv preprint arXiv:2410.07590},
-  year    = {2024}
+@inproceedings{lu2025turborag,
+  title         = {{TurboRAG}: Accelerating Retrieval-Augmented Generation with Precomputed {KV} Caches for Chunked Text},
+  author        = {Lu, Songshuo and Wang, Hua and Rong, Yutian and Chen, Zhi and Tang, Yaohua},
+  booktitle     = {Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  pages         = {6588--6601},
+  publisher     = {Association for Computational Linguistics},
+  year          = {2025},
+  doi           = {10.18653/v1/2025.emnlp-main.334},
+  eprint        = {2410.07590},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2410.07590}
 }
 
-@article{yang2025kvlink,
-  title   = {{KVLink}: Accelerating Large Language Models via Efficient {KV} Cache Reuse},
-  author  = {Yang, Jingbo and Hou, Bairu and Wei, Wei and Bao, Yujia and Chang, Shiyu},
-  journal = {arXiv preprint arXiv:2502.16002},
-  year    = {2025}
+@inproceedings{yang2025kvlink,
+  title         = {{KVLink}: Accelerating Large Language Models via Efficient {KV} Cache Reuse},
+  author        = {Yang, Jingbo and Hou, Bairu and Wei, Wei and Bao, Yujia and Chang, Shiyu},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume        = {38},
+  year          = {2025},
+  doi           = {10.52202/085713-4461},
+  eprint        = {2502.16002},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2502.16002}
 }
 
 @inproceedings{chen2025struq,
-  title     = {{StruQ}: Defending Against Prompt Injection with Structured Queries},
-  author    = {Chen, Sizhe and Piet, Julien and Sitawarin, Chawin and Wagner, David},
-  booktitle = {Proceedings of the USENIX Security Symposium},
-  year      = {2025},
-  note      = {arXiv:2402.06363}
+  title         = {{StruQ}: Defending Against Prompt Injection with Structured Queries},
+  author        = {Chen, Sizhe and Piet, Julien and Sitawarin, Chawin and Wagner, David},
+  booktitle     = {Proceedings of the 34th USENIX Security Symposium (USENIX Security)},
+  pages         = {2383--2400},
+  publisher     = {USENIX Association},
+  year          = {2025},
+  url           = {https://www.usenix.org/conference/usenixsecurity25/presentation/chen-sizhe},
+  eprint        = {2402.06363},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2402.06363}
 }
 
 @inproceedings{chen2025secalign,
-  title     = {{SecAlign}: Defending Against Prompt Injection with Preference Optimization},
-  author    = {Chen, Sizhe and Zharmagambetov, Arman and Mahloujifar, Saeed and Chaudhuri, Kamalika and Wagner, David and Guo, Chuan},
-  booktitle = {Proceedings of the ACM Conference on Computer and Communications Security (CCS)},
-  year      = {2025},
-  note      = {arXiv:2410.05451}
+  title         = {{SecAlign}: Defending Against Prompt Injection with Preference Optimization},
+  author        = {Chen, Sizhe and Zharmagambetov, Arman and Mahloujifar, Saeed and Chaudhuri, Kamalika and Wagner, David and Guo, Chuan},
+  booktitle     = {Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communications Security (CCS)},
+  pages         = {2833--2847},
+  publisher     = {ACM},
+  year          = {2025},
+  doi           = {10.1145/3719027.3744836},
+  eprint        = {2410.05451},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2410.05451}
 }
 
-@article{hines2024spotlighting,
-  title   = {Defending Against Indirect Prompt Injection Attacks With Spotlighting},
-  author  = {Hines, Keegan and Lopez, Gary and Hall, Matthew and Zarfati, Federico and Zunger, Yonatan and Kiciman, Emre},
-  journal = {arXiv preprint arXiv:2403.14720},
-  year    = {2024}
+@inproceedings{hines2024spotlighting,
+  title         = {Defending Against Indirect Prompt Injection Attacks With {Spotlighting}},
+  author        = {Hines, Keegan and Lopez, Gary and Hall, Matthew and Zarfati, Federico and Zunger, Yonatan and Kiciman, Emre},
+  booktitle     = {Proceedings of the Conference on Applied Machine Learning in Information Security (CAMLIS 2024)},
+  series        = {CEUR Workshop Proceedings},
+  volume        = {3920},
+  pages         = {48--62},
+  publisher     = {CEUR-WS.org},
+  year          = {2024},
+  url           = {https://ceur-ws.org/Vol-3920/paper03.pdf},
+  eprint        = {2403.14720},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2403.14720}
 }
 
 @inproceedings{zhan2024injecagent,
-  title     = {{InjecAgent}: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents},
-  author    = {Zhan, Qiusi and Liang, Zhixiang and Ying, Zifan and Kang, Daniel},
-  booktitle = {Findings of the Association for Computational Linguistics (ACL)},
-  year      = {2024},
-  note      = {arXiv:2403.02691}
+  title         = {{InjecAgent}: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents},
+  author        = {Zhan, Qiusi and Liang, Zhixiang and Ying, Zifan and Kang, Daniel},
+  booktitle     = {Findings of the Association for Computational Linguistics: ACL 2024},
+  pages         = {10471--10506},
+  publisher     = {Association for Computational Linguistics},
+  year          = {2024},
+  doi           = {10.18653/v1/2024.findings-acl.624},
+  eprint        = {2403.02691},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2403.02691}
 }
 
 @inproceedings{debenedetti2024agentdojo,
-  title     = {{AgentDojo}: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for {LLM} Agents},
-  author    = {Debenedetti, Edoardo and Zhang, Jie and Balunovi{\'c}, Mislav and Beurer-Kellner, Luca and Fischer, Marc and Tram{\`e}r, Florian},
-  booktitle = {Advances in Neural Information Processing Systems (Datasets and Benchmarks)},
-  year      = {2024},
-  note      = {arXiv:2406.13352}
+  title         = {{AgentDojo}: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for {LLM} Agents},
+  author        = {Debenedetti, Edoardo and Zhang, Jie and Balunovi{\'c}, Mislav and Beurer-Kellner, Luca and Fischer, Marc and Tram{\`e}r, Florian},
+  booktitle     = {Advances in Neural Information Processing Systems (NeurIPS), Datasets and Benchmarks Track},
+  volume        = {37},
+  pages         = {82895--82920},
+  year          = {2024},
+  doi           = {10.52202/079017-2636},
+  eprint        = {2406.13352},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2406.13352}
 }
 
 @inproceedings{yi2025bipia,
-  title     = {Benchmarking and Defending Against Indirect Prompt Injection Attacks on Large Language Models},
-  author    = {Yi, Jingwei and Xie, Yueqi and Zhu, Bin and Kiciman, Emre and Sun, Guangzhong and Xie, Xing and Wu, Fangzhao},
-  booktitle = {Proceedings of the ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)},
-  year      = {2025},
-  note      = {arXiv:2312.14197}
+  title         = {Benchmarking and Defending Against Indirect Prompt Injection Attacks on Large Language Models},
+  author        = {Yi, Jingwei and Xie, Yueqi and Zhu, Bin and Kiciman, Emre and Sun, Guangzhong and Xie, Xing and Wu, Fangzhao},
+  booktitle     = {Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD), Volume 1},
+  pages         = {1809--1820},
+  publisher     = {ACM},
+  year          = {2025},
+  doi           = {10.1145/3690624.3709179},
+  eprint        = {2312.14197},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2312.14197}
 }
 
 @inproceedings{rajpurkar2016squad,
-  title     = {{SQuAD}: 100,000+ Questions for Machine Comprehension of Text},
-  author    = {Rajpurkar, Pranav and Zhang, Jian and Lopyrev, Konstantin and Liang, Percy},
-  booktitle = {Proceedings of the Conference on Empirical Methods in Natural Language Processing (EMNLP)},
-  year      = {2016},
-  note      = {arXiv:1606.05250}
+  title         = {{SQuAD}: 100,000+ Questions for Machine Comprehension of Text},
+  author        = {Rajpurkar, Pranav and Zhang, Jian and Lopyrev, Konstantin and Liang, Percy},
+  booktitle     = {Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  pages         = {2383--2392},
+  publisher     = {Association for Computational Linguistics},
+  year          = {2016},
+  doi           = {10.18653/v1/D16-1264},
+  eprint        = {1606.05250},
+  archivePrefix = {arXiv},
+  note          = {arXiv:1606.05250}
 }
 
 @inproceedings{hung2025attentiontracker,
-  title     = {Attention Tracker: Detecting Prompt Injection Attacks in {LLMs}},
-  author    = {Hung, Kuo-Han and Ko, Ching-Yun and Rawat, Ambrish and Chung, I-Hsin and Hsu, Winston H. and Chen, Pin-Yu},
-  booktitle = {Findings of the Association for Computational Linguistics: NAACL 2025},
-  pages     = {2309--2322},
-  year      = {2025},
-  doi       = {10.18653/v1/2025.findings-naacl.123}
+  title         = {{Attention Tracker}: Detecting Prompt Injection Attacks in {LLMs}},
+  author        = {Hung, Kuo-Han and Ko, Ching-Yun and Rawat, Ambrish and Chung, I-Hsin and Hsu, Winston H. and Chen, Pin-Yu},
+  booktitle     = {Findings of the Association for Computational Linguistics: NAACL 2025},
+  pages         = {2309--2322},
+  publisher     = {Association for Computational Linguistics},
+  year          = {2025},
+  doi           = {10.18653/v1/2025.findings-naacl.123},
+  eprint        = {2411.00348},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2411.00348}
 }
 
 @inproceedings{zverev2025separate,
-  title     = {Can {LLMs} Separate Instructions From Data? And What Do We Even Mean By That?},
-  author    = {Zverev, Egor and Abdelnabi, Sahar and Tabesh, Soroush and Fritz, Mario and Lampert, Christoph H.},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2025}
+  title         = {Can {LLMs} Separate Instructions From Data? {And} What Do We Even Mean By That?},
+  author        = {Zverev, Egor and Abdelnabi, Sahar and Tabesh, Soroush and Fritz, Mario and Lampert, Christoph H.},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  url           = {https://openreview.net/forum?id=8EtSBX41mt},
+  eprint        = {2403.06833},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2403.06833}
 }
 
 @inproceedings{wu2025ise,
-  title     = {Instructional Segment Embedding: Improving {LLM} Safety with Instruction Hierarchy},
-  author    = {Wu, Tong and Zhang, Shujian and Song, Kaiqiang and Xu, Silei and Zhao, Sanqiang and Agrawal, Ravi and Indurthi, Sathish Reddy and Xiang, Chong and Mittal, Prateek and Zhou, Wenxuan},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2025}
+  title         = {Instructional Segment Embedding: Improving {LLM} Safety with Instruction Hierarchy},
+  author        = {Wu, Tong and Zhang, Shujian and Song, Kaiqiang and Xu, Silei and Zhao, Sanqiang and Agrawal, Ravi and Indurthi, Sathish Reddy and Xiang, Chong and Mittal, Prateek and Zhou, Wenxuan},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2025},
+  url           = {https://openreview.net/forum?id=sjWG7B8dvt},
+  eprint        = {2410.09102},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2410.09102}
 }
 
-@inproceedings{zverev2025aside,
-  title     = {{ASIDE}: Architectural Separation of Instructions and Data in Language Models},
-  author    = {Zverev, Egor and Kortukov, Evgenii and Panfilov, Alexander and Volkova, Alexandra and Tabesh, Soroush and Lapuschkin, Sebastian and Samek, Wojciech and Lampert, Christoph H.},
-  booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2026},
-  note      = {arXiv:2503.10566}
+@inproceedings{zverev2026aside,
+  title         = {{ASIDE}: Architectural Separation of Instructions and Data in Language Models},
+  author        = {Zverev, Egor and Kortukov, Evgenii and Panfilov, Alexander and Volkova, Alexandra and Tabesh, Soroush and Lapuschkin, Sebastian and Samek, Wojciech and Lampert, Christoph H.},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  year          = {2026},
+  url           = {https://openreview.net/forum?id=C81TnwHiRM},
+  eprint        = {2503.10566},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2503.10566}
 }
 
-@inproceedings{chen2025pitfalls,
-  title     = {The Pitfalls of {KV} Cache Compression},
-  author    = {Chen, Alex and Geh, Renato and Grover, Aditya and Van den Broeck, Guy and Israel, Daniel},
-  booktitle = {Proceedings of the Annual Meeting of the Association for Computational Linguistics (ACL)},
-  year      = {2026},
-  note      = {arXiv:2510.00231}
+@inproceedings{chen2026pitfalls,
+  title         = {The Pitfalls of {KV} Cache Compression},
+  author        = {Chen, Alex and Geh, Renato and Grover, Aditya and Van den Broeck, Guy and Israel, Daniel Mingyi},
+  booktitle     = {Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) (ACL)},
+  pages         = {41530--41553},
+  publisher     = {Association for Computational Linguistics},
+  year          = {2026},
+  doi           = {10.18653/v1/2026.acl-long.1926},
+  eprint        = {2510.00231},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2510.00231}
 }
 
 @inproceedings{ratner2023pcw,
-  title     = {Parallel Context Windows for Large Language Models},
-  author    = {Ratner, Nir and Levine, Yoav and Belinkov, Yonatan and Ram, Ori and Magar, Inbal and Abend, Omri and Karpas, Ehud and Shashua, Amnon and Leyton-Brown, Kevin and Shoham, Yoav},
-  booktitle = {Proceedings of the Annual Meeting of the Association for Computational Linguistics (ACL)},
-  year      = {2023}
+  title         = {{Parallel Context Windows} for Large Language Models},
+  author        = {Ratner, Nir and Levine, Yoav and Belinkov, Yonatan and Ram, Ori and Magar, Inbal and Abend, Omri and Karpas, Ehud and Shashua, Amnon and Leyton-Brown, Kevin and Shoham, Yoav},
+  booktitle     = {Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) (ACL)},
+  pages         = {6383--6402},
+  publisher     = {Association for Computational Linguistics},
+  year          = {2023},
+  doi           = {10.18653/v1/2023.acl-long.352},
+  eprint        = {2212.10947},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2212.10947}
 }
 
-@article{merth2024superposition,
-  title   = {Superposition Prompting: Improving and Accelerating Retrieval-Augmented Generation},
-  author  = {Merth, Thomas and Fu, Qichen and Rastegari, Mohammad and Najibi, Mahyar},
-  journal = {arXiv preprint arXiv:2404.06910},
-  year    = {2024}
+@inproceedings{merth2024superposition,
+  title         = {{Superposition Prompting}: Improving and Accelerating Retrieval-Augmented Generation},
+  author        = {Merth, Thomas and Fu, Qichen and Rastegari, Mohammad and Najibi, Mahyar},
+  booktitle     = {Proceedings of the 41st International Conference on Machine Learning (ICML)},
+  series        = {Proceedings of Machine Learning Research},
+  volume        = {235},
+  pages         = {35507--35527},
+  publisher     = {PMLR},
+  year          = {2024},
+  url           = {https://proceedings.mlr.press/v235/merth24a.html},
+  eprint        = {2404.06910},
+  archivePrefix = {arXiv},
+  note          = {arXiv:2404.06910}
 }
 
 @article{chen2025metasecalign,
-  title   = {Meta-{SecAlign}: Training {LLMs} against Prompt Injection for Robust Agents},
-  author  = {Chen, Sizhe and Zharmagambetov, Arman and Wagner, David and Guo, Chuan},
-  journal = {arXiv preprint arXiv:2507.02735},
-  year    = {2025}
+  title         = {{Meta-SecAlign}: Training {LLMs} against Prompt Injection for Robust Agents},
+  author        = {Chen, Sizhe and Zharmagambetov, Arman and Wagner, David and Guo, Chuan},
+  journal       = {arXiv preprint arXiv:2507.02735},
+  year          = {2025},
+  eprint        = {2507.02735},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2507.02735}
 }
 
 @article{owen2007pigeonhole,
-  title   = {The Pigeonhole Bootstrap},
-  author  = {Owen, Art B.},
-  journal = {The Annals of Applied Statistics},
-  volume  = {1},
-  number  = {2},
-  pages   = {386--411},
-  year    = {2007},
-  doi     = {10.1214/07-AOAS122}
+  title         = {The Pigeonhole Bootstrap},
+  author        = {Owen, Art B.},
+  journal       = {The Annals of Applied Statistics},
+  volume        = {1},
+  number        = {2},
+  pages         = {386--411},
+  year          = {2007},
+  doi           = {10.1214/07-AOAS122}
 }

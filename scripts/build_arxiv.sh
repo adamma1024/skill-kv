@@ -15,4 +15,14 @@ for f in $(grep -o 'figures/[A-Za-z0-9_]*\.pdf' main.tex | sort -u); do cp "$f" 
 ( cd arxiv && rm -f main.aux main.log main.out main.blg )  # ship main.bbl (arXiv reads it) and refs.bib
 grep -q 'bibitem' arxiv/main.bbl || { echo "main.bbl has no entries" >&2; exit 1; }
 ( cd arxiv && tar czf ../arxiv.tar.gz --exclude main.pdf --exclude '*.aux' --exclude '*.log' --exclude '*.out' . )
+# the arXiv form's abstract must match the PDF: regenerate it from the LaTeX source
+uv run python ../scripts/arxiv_abstract.py main.tex > arxiv/abstract.txt
+python3 - <<'PY'
+from pathlib import Path
+m = Path("arxiv_metadata.md")
+s = m.read_text()
+head = s.split("**Abstract**")[0]
+m.write_text(head + "**Abstract** (plain text, generated from main.tex by scripts/arxiv_abstract.py; paste as is):\n\n"
+             + Path("arxiv/abstract.txt").read_text())
+PY
 echo "built paper/arxiv/main.pdf and paper/arxiv.tar.gz ($(du -h arxiv.tar.gz | cut -f1))"
