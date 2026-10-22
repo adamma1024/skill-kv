@@ -461,7 +461,7 @@ def scale_natural():
         avail = [c for c, _ in sweep if complete(rs, c)]
         if len(avail) < 2:
             continue
-        xs, ys, los, his, cells = [], [], [], [], []
+        xs, ys, los, his, cells, order = [], [], [], [], [], []
         for c, _ in sweep:
             if c not in avail:
                 cells.append("--")
@@ -469,13 +469,16 @@ def scale_natural():
             fr = [r["recompute_fraction"] for r in rs if r["cond"] == c and r.get("recompute_fraction") is not None]
             x = mean(fr) if fr else 0.0
             v, lo, hi = ci(paired(rs, c, "T1", key, "complied", cl))
-            xs.append(x); ys.append(v); los.append(v - lo); his.append(hi - v)
+            xs.append(x); ys.append(v); los.append(v - lo); his.append(hi - v); order.append([c for c, _ in sweep].index(c))
             cells.append(f"{num(v, True)} [{num(lo)}, {num(hi)}]")
             m(f"Sweep{'Bzero' if c == 'T3' else c.replace('T3B', 'B').replace('15', 'fifteen').replace('30', 'thirty').replace('50', 'fifty')}{tag}", cells[-1])
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
         k = [t for _, _, t in ALL_MODELS].index(tag)  # colour and marker follow the model, not its rank
-        ax.errorbar(xs, ys, yerr=[los, his], color=C[k], marker=MARKERS[k], markersize=3.5, linewidth=1.5,
+        ax.errorbar(xs, ys, yerr=[los, his], color=C[k], marker=MARKERS[k], markersize=3.5, linewidth=0,
                     elinewidth=0.6, capsize=1.5, label=label)
+        for i in range(len(xs) - 1):  # dashed where a budget was not run
+            ax.plot(xs[i:i + 2], ys[i:i + 2], color=C[k], linewidth=1.5,
+                    linestyle="-" if order[i + 1] == order[i] + 1 else (0, (3, 2)))
         j += 1
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("sweep", lines)
@@ -500,6 +503,11 @@ def ia_rows():
     for r in rows:
         count[r["model"], r["seed"]] += 1
     rows = [r for r in rows if count[r["model"], r["seed"]] == n_full]
+    # a seed is used only once it is complete for every model, so models are never compared across seed counts
+    models = {r["model"] for r in rows if r["seed"] == 0}
+    seeds = {s for s in {r["seed"] for r in rows} if all(count[mid, s] == n_full for mid in models)}
+    rows = [r for r in rows if r["seed"] in seeds]
+    m("IaNseeds", {1: "one", 2: "two", 3: "three"}[len(seeds)])
     for r in rows:
         c = cases[r["kind"], r["index"]]
         r["attack"], r["user"], r["complied"] = c.attacker_instruction, c.user_instruction, r["attack_success"]
@@ -664,7 +672,7 @@ def attention():
         return f"{num(v, True)} [{num(est[int(0.025 * len(est))])}, {num(est[int(0.975 * len(est))])}]"
 
     lines = [r"\begin{tabular}{lrrrrr}", r"\toprule",
-             r"& \multicolumn{2}{c}{$\Delta$ attention to injected span} & \multicolumn{2}{c}{$\Delta$ attention to user turn} & Flip $-$ stay \\",
+             r"& \multicolumn{2}{c}{$\Delta$ attention to injected span} & \multicolumn{2}{c}{$\Delta$ attention to conversation} & Flip $-$ stay \\",
              r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}",
              r"Model & Synthetic & Natural & Synthetic & Natural & (pooled) \\", r"\midrule"]
     present = [(mid, label, tag) for mid, label, tag in ALL_MODELS if any(r["model"] == mid for r in rows)]
@@ -703,7 +711,9 @@ def attention():
             n_layers = len(rs[0]["per_layer"]["injection"])
             ys = [100 * mean(by["T3"][k]["per_layer"]["injection"][l] - by["T1"][k]["per_layer"]["injection"][l] for k in ks)
                   for l in range(n_layers)]
-            ax.plot([l / (n_layers - 1) for l in range(n_layers)], ys, color=C[j], linewidth=1.3,
+            # source is not a model, so it gets ink and line style rather than a categorical model colour
+            ax.plot([l / (n_layers - 1) for l in range(n_layers)], ys, color=INK if source == "syn" else MUTED,
+                    linestyle="-" if source == "syn" else "--", linewidth=1.2,
                     label="synthetic" if source == "syn" else "natural")
         ax.axhline(0, color=MUTED, linewidth=0.6)
         ax.set_title(label, fontsize=7, color=INK)
@@ -812,7 +822,7 @@ def nat_rows():
 
 def localization():
     """Partial-mask ablation: which conversation edge does the document need to see? One table per source."""
-    conds = [("T1", "T1"), ("T1Mreq", "call masked"), ("T1Mq", "question masked"), ("T1Mcall", "request masked"),
+    conds = [("T1", "T1"), ("T1Mreq", "call masked"), ("T1Mq", "question masked"), ("T1Mcall", "user turn masked"),
              ("T1M", "T1$'$ (both)"), ("T3", "T3 (pack)")]
     n_rows = 0
     for kind, rows in (("Syn", [r for r in syn_rows() if r["injection"]]), ("Nat", [r for r in nat_rows() if r["injection"]])):
@@ -881,6 +891,7 @@ def pertype_all():
                 cells.append(f"{a_:.2f} $\\rightarrow$ {b_:.2f}")
                 src = "Syn" if rows is syn else "Nat"
                 m(f"Type{src}{kind.title()}{tag}", f"{a_:.2f} $\\rightarrow$ {b_:.2f}")
+                m(f"TypeOne{src}{kind.title()}{tag}", f"{a_:.2f}")
             else:
                 cells.append("--")
         if any(c != "--" for c in cells):
@@ -916,6 +927,16 @@ def cost():
     m("DocTrunc", str(sum(r["gen_tokens"] >= 160 for r in docs)))
     m("DocNgen", f"{len(docs):,}".replace(",", "{,}"))
     fr = [r["recompute_fraction"] for r in syn if r["cond"] == "T3B15" and r.get("recompute_fraction") is not None]
+    clean = defaultdict(list)
+    for r in syn:
+        if not r["injection"]:
+            clean[r["model"], r["cond"]].append(float(r["correct"]))
+    rate_c = {k: mean(v) for k, v in clean.items()}
+    m("CleanAccMinAll", f"{min(v for (mid, c), v in rate_c.items() if c in ('T1', 'T3')):.2f}")
+    m("CleanAccMinRecompute", f"{min(v for (mid, c), v in rate_c.items() if c.startswith('T3B')):.2f}")
+    toks = [r["doc_tokens"] for r in syn]
+    m("DocTokMin", f"{min(toks):,}".replace(",", "{,}"))
+    m("DocTokMax", f"{max(toks):,}".replace(",", "{,}"))
     m("FracBfifteen", f"{100 * mean(fr):.0f}")
     fr = [r["recompute_fraction"] for r in syn if r["cond"] == "T3B50" and r.get("recompute_fraction") is not None]
     m("FracBfifty", f"{100 * mean(fr):.0f}")
@@ -975,6 +996,23 @@ def glmm():
         m(f"Glmm{tag}", f"{num(b, True)} ({sd:.2f})")
 
 
+def span_sizes():
+    """Mean token counts of the masked spans (user turn, question text, tool call) per chat format, so the
+    partial-mask results can be read against how many tokens each mask hides."""
+    from huggingface_hub import snapshot_download
+    from mlx_lm.utils import load_tokenizer
+    from skillkv.chat import detect_format
+    from skillkv.inject import doc_layout, make_items, make_natural_items
+    items = make_items(12, 0) + make_items(12, 1) + make_natural_items(ROOT / "data" / "natural_docs.json")
+    for mid, name in (("Qwen/Qwen3-4B", "Qwen"), ("mlx-community/Llama-3.2-3B-Instruct", "Llama")):
+        tok = load_tokenizer(snapshot_download(mid, allow_patterns=["*.json", "*.txt", "*.model", "*.jinja"]))
+        enc = lambda t: tok.encode(t, add_special_tokens=False)  # noqa: E731
+        L = doc_layout(enc, items[:2], fmt=detect_format(tok))
+        m(f"SpanUser{name}", f"{mean(len(L.user_turn(it.question)) for it in items):.0f}")
+        m(f"SpanQ{name}", f"{mean(len(enc(it.question)) for it in items):.0f}")
+        m(f"SpanCall{name}", f"{mean(len(L.tool_call(it.name)) for it in items):.0f}")
+
+
 def main():
     (OUT / "figures").mkdir(parents=True, exist_ok=True)
     (OUT / "tables").mkdir(parents=True, exist_ok=True)
@@ -994,6 +1032,7 @@ def main():
     cost()
     template()
     glmm()
+    span_sizes()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))

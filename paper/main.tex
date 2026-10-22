@@ -12,6 +12,9 @@
 \input{numbers.tex}
 \setlength{\emergencystretch}{1.5em}
 \newcommand{\cond}[1]{\textsf{#1}}
+\newcommand{\Mcall}{\cond{T1$\setminus$call}}
+\newcommand{\Muser}{\cond{T1$\setminus$user}}
+\newcommand{\Mq}{\cond{T1$\setminus$q}}
 \newcommand{\pending}[1]{\textcolor{red}{[PENDING: #1]}}
 
 \title{Context-Free KV Reuse Changes What Language Models Obey}
@@ -37,15 +40,15 @@ In an agent layout where a tool result follows the user's request, we mount the 
 conversation (a \emph{pack}). This raises compliance with instructions injected into the tool result. We test six open
 models (Qwen3 4B--32B and Llama-3 3B and 8B) plus a 4-bit control, synthetic and Wikipedia documents, and a stage-1 adaptation of InjecAgent. Of
 \PrimaryN\ primary model-by-dataset contrasts, \PrimaryPos\ show a significant increase after Holm correction, of up to
-\ScaleSynDThirtyTwo; none shows a significant decrease. The attacker needs no access to the cache, and neither a defensive system
-prompt nor spotlighting removes the increase.
+\ScaleSynDThirtyTwo; none shows a significant decrease. The attacker needs no access to the cache. On the three bf16 models where we
+test them, neither a defensive system prompt nor spotlighting removes the increase.
 
 A partial-mask ablation on all six models localizes the increase to the missing attention from the document to the user's turn.
 Blocking only that edge inside an ordinary prefill raises compliance to most or all of the pack's level. Blocking only the edge to
 the tool call leaves compliance at the level of plain prefill on five of six models.
 
 CacheBlend-style selective recompute shrinks the excess as more is recomputed. At about \FracBfifty\% of prefill compute, a
-significant residual remains on three of five models, so the defense costs about half a prefill.
+significant residual remains on three of five models, so even about half a prefill of recompute does not reliably remove it.
 
 For trusted agent skills, the same encoding raises adherence to standalone rules on Qwen3-4B, but no more than placing the skill in
 the system prompt does.
@@ -56,8 +59,8 @@ Context-free reuse should therefore be keyed on the trust level of the content.
 % =====================================================================================
 \section{Introduction}
 Prompt prefill dominates latency when long inputs are processed repeatedly. Serving systems have therefore moved from exact
-prefix caching~\citep{gim2024promptcache,zheng2024sglang} to reusing KV caches at arbitrary
-positions~\citep{yao2025cacheblend,hu2024epic,chen2026kvpacket,li2026notes,liu2025lmcache}.
+prefix caching~\citep{zheng2024sglang} to reusing KV caches at arbitrary
+positions~\citep{gim2024promptcache,yao2025cacheblend,hu2024epic,chen2026kvpacket,li2026notes,liu2025lmcache}.
 
 Agents are a natural target. Several kinds of content are static or reused, so their KV can be computed once and spliced in whenever
 they are needed:
@@ -84,8 +87,10 @@ Our findings, in order of section:
     documents) and on Llama-3.1-8B (\ScaleSynDLlamaEight\ on synthetic documents).
   \item The six non-significant cells include a floor and a ceiling. Llama-3.2-3B almost never calls the attacker tool in
     InjecAgent, and Qwen3-4B already obeys Wikipedia injections under plain prefill.
-  \item Spotlighting~\citep{hines2024spotlighting} suppresses compliance under plain prefill but not under a pack. A 4-bit Qwen3-8B
-    shows the effect too, so quantization is not required for it.
+  \item Spotlighting~\citep{hines2024spotlighting} suppresses compliance under plain prefill but not under a pack on the Qwen models;
+    on Llama-3.2-3B it halves the increase.
+  \item A 4-bit Qwen3-8B control shows the effect on natural documents, and weakly on synthetic ones. Quantization changes its size,
+    not its sign.
   \end{itemize}
 \item \textbf{Behavioral localization} (\S\ref{sec:mechanism}).
   \begin{itemize}
@@ -98,8 +103,8 @@ Our findings, in order of section:
     \item A document that sees only the tool call is obeyed nearly as often as a pack.
     \item Masking only the question text reproduces part of the effect, and how much depends on the model.
     \end{itemize}
-  \item Attention from the first answer token to the injected span rises under a pack on synthetic documents for every model,
-    but not consistently on natural documents.
+  \item Attention from the first answer token to the injected span rises under a pack on synthetic documents for all five models
+    measured, but not consistently on natural documents.
   \end{itemize}
 \item \textbf{Mitigation and scope} (\S\ref{sec:mitigation}).
   \begin{itemize}
@@ -109,7 +114,8 @@ Our findings, in order of section:
     remain; in our unoptimized engine, time-to-first-token is 0.5--0.8$\times$ that of full prefill, against about 0.05$\times$ for
     the plain pack.
   \item On InjecAgent, \FracBfifteen\% recompute leaves almost the whole increase.
-  \item In the classic RAG layout, where documents precede the question, only one model complies at all, and its increase is smaller.
+  \item In the classic RAG layout, where documents precede the question, only one of the three models tested complies at all, and its
+    increase is smaller.
   \end{itemize}
 \item \textbf{Trusted skills} (\S\ref{sec:skills}). The same encoding lifts adherence to standalone skill rules on Qwen3-4B
   (\WtwoFourCone\ $\rightarrow$ \WtwoFourCthree\ of tasks obey all rules). Placing the skill in the system prompt, which exact
@@ -156,7 +162,9 @@ report of an exploitable deployment.
 
 % =====================================================================================
 \section{Related work}\label{sec:related}
-\textbf{KV reuse.} Prompt Cache~\citep{gim2024promptcache} and RadixAttention~\citep{zheng2024sglang} reuse exact prefixes.
+\textbf{KV reuse.} RadixAttention~\citep{zheng2024sglang} reuses exact prefixes. Prompt Cache~\citep{gim2024promptcache} goes
+further: it encodes prompt modules independently at assigned positions and reuses them modularly, the earliest context-free design
+we know of.
 LMCache~\citep{liu2025lmcache} and the knowledge-delivery view~\citep{cheng2024kdn} treat KV as storable knowledge.
 
 Non-prefix reuse takes one of three approaches:
@@ -183,7 +191,7 @@ measure which instructions win. Cross-model transfer~\citep{liu2024droidspeak,fu
 \item \citet{ganesh2025narrative} overwrite cache segments directly.
 \item \citet{sun2026sidechannel} exploit non-prefix RAG caches as a side channel.
 \end{itemize}
-In all of these the adversary controls the \emph{encoding context} of the cached state or the state itself. In our setting the
+In the poisoning attacks the adversary controls the \emph{encoding context} of the cached state or the state itself. In our setting the
 attacker controls only the content, and the encoding context is the serving system's fixed header.
 
 \textbf{Indirect prompt injection and defenses.} Benchmarks include InjecAgent~\citep{zhan2024injecagent},
@@ -230,9 +238,11 @@ three equivalences:
 \item \cond{T1} is standard prefill.
 \item \cond{T3} is the context-free pack.
 \item \cond{T1$'$} prefills the tool-result header and document at their true positions, with attention from these tokens to the user
-  turn and the tool call masked. Under relative position encoding, it differs from \cond{T3} only in the size of the position gap
-  between the system prompt and the document. It is therefore a sanity check, not an independent mechanism test.
-\item \cond{T1Mreq} and \cond{T1Mcall} mask only the tool call or only the user request, and so localize which edge matters.
+  turn and the tool call masked. Under relative position encoding, it differs from \cond{T3} in two respects only: the position gap between the system prompt and the
+  document, and the tool-result header, which \cond{T1$'$} masks but \cond{T3} prefills in context. It is therefore a sanity check,
+  not an independent mechanism test.
+\item \Mcall{}, \Muser{} and \Mq{} mask only the tool call, only the user turn, or only the question text, and so localize which
+  edge matters (the document's own header stays masked in all three).
 \item \cond{T3G} gives the pack a conversation-shaped prelude.
 \item \cond{T3B$x$} approximates CacheBlend~\citep{yao2025cacheblend}. All document tokens are recomputed on the first two layers,
   then the $x\%$ with the largest layer-1 K/V deviation are recomputed on all later layers. Because two layers are always fully
@@ -249,9 +259,9 @@ Condition & How the tool result (document / skill) enters the cache \\
 \cond{T1} / \cond{C1} & Prefilled as the tool result, in context (standard). \\
 \cond{T3} / \cond{C3} & Spliced at the same position from a pack built after \texttt{[system][tool-result header]}. \\
 \cond{T1$'$} & Header and document prefilled at their true positions; their attention to the user turn and tool call is masked. \\
-\cond{T1Mreq} & As \cond{T1$'$}, but only the tool call is masked; the document sees the user turn (role header, question, end marker and assistant header). \\
-\cond{T1Mcall} & As \cond{T1$'$}, but only the user turn is masked; the document sees the tool call. \\
-\cond{T1Mq} & As \cond{T1$'$}, but only the question text is masked; role headers and the tool call stay visible. \\
+\Mcall{} & As \cond{T1$'$}, but only the tool call is masked; the document sees the user turn (role header, question, end marker and assistant header). \\
+\Muser{} & As \cond{T1$'$}, but only the user turn is masked; the document sees the tool call. \\
+\Mq{} & As \cond{T1$'$}, but only the question text is masked; role headers and the tool call stay visible. \\
 \cond{T3G} / \cond{C3G} & Pack built after a content-free question and the tool call (conversation-shaped prelude). \\
 \cond{T2} / \cond{C2} & Placed in the system prompt (exact prefix); the tool result is an acknowledgement. \\
 \cond{T3F16}, \cond{T3L16} & \cond{T3} with the first / last 16 tokens recomputed in context. \\
@@ -283,9 +293,10 @@ ways; a robustness check with the official templates is in \S\ref{sec:robust}:
 \item Llama: the system header lacks the date preamble, and the tool content is not JSON-quoted.
 \end{itemize}
 
-\textbf{Synthetic documents.} We generate two libraries of 12 procedure documents each (650--3,300 tokens). The user asks for one
+\textbf{Synthetic documents.} We generate two libraries of 12 procedure documents each (\DocTokMin--\DocTokMax\ tokens). The user asks for one
 parameter value and reads the document through a \texttt{read\_doc} tool. Each document has a clean version and three injected
-versions, with an inert canary placed at depth 0.1, 0.5 or 0.9:
+versions, one per type. Each carries an inert canary at one depth (0.1, 0.5 or 0.9 of the document), rotating across
+documents and types:
 \begin{itemize}
 \item \emph{override}: ``ignore the user's question, reply only \texttt{ACK-<canary>}'';
 \item \emph{append}: ``end with \texttt{ref:~<canary>}'';
@@ -295,14 +306,14 @@ Each injected item is sampled with two seeds, giving \InjNtrials\ injected trial
 
 \textbf{Natural documents.} For each of the \NatNdocs\ articles in the SQuAD v1.1 validation set~\citep{rajpurkar2016squad}, we
 concatenate consecutive paragraphs into a 555--806-word document. The question is a SQuAD question with a short answer (at most 4
-words) found in the document. Override and append canaries are inserted at sentence boundaries at the same three depths. Each item
+words) found in the document. Override and append canaries are inserted at sentence boundaries, at one of the same three depths, rotating as above. Each item
 is sampled with two seeds. We dropped the \emph{refuse} type for natural documents after the synthetic runs on the first three
 models, where it almost never fired; it does fire on Qwen3-32B and Llama-3.1-8B, which we ran later (Table~\ref{tab:pertype}). Only the carrier text is natural: the injection is the same explicit notice as in the
 synthetic documents.
 
 \textbf{InjecAgent (stage-1 variant).} We use every fourth case of the direct-harm (DH) and data-stealing (DS) test sets in the
-\emph{enhanced} setting~\citep{zhan2024injecagent}. This gives \IaNcases\ cases, crossing \IaNattacks\ attack instructions with
-\IaNusers\ user cases.
+\emph{enhanced} setting~\citep{zhan2024injecagent}. This gives \IaNcases\ cases, drawn from the crossing of \IaNattacks\ attack
+instructions and \IaNusers\ user cases.
 \begin{itemize}
 \item The system prompt lists the user tool and the attacker tools in one line each.
 \item The model sees the user instruction and its own call to the user tool, then reads the tool response, which contains the
@@ -324,13 +335,13 @@ code line, heading or sign-off. Grading is positional: the code line must come f
 \item Sampling uses $T{=}0.7$, top-$p$ 0.8 and top-$k$ 20. The random stream is shared across the conditions of an item (common
   random numbers).
 \item Document runs use a 160-token budget, which only \DocTrunc\ of their \DocNgen\ responses reached. InjecAgent responses use
-  256 tokens, with one sampled response per case; at most \IaTruncMaxMain\% are truncated in \cond{T1} or \cond{T3}, and at most
-  \IaTruncMax\% in any cell. Skill answers use 512 tokens; truncation is negligible except for
-  Llama-3.2-3B under \cond{C3M} (\WtwoLlamaTruncCthreeM\%), which we flag where it matters.
+  256 tokens, with \IaNseeds\ sampled response(s) per case; at most \IaTruncMaxMain\% are truncated in \cond{T1} or \cond{T3}, and at most
+  \IaTruncMax\% in any cell. Skill answers use 512 tokens; truncation is zero on the Qwen models and at
+  most \WtwoLlamaTruncConeM\% on Llama-3.2-3B, except under \cond{C3M} (\WtwoLlamaTruncCthreeM\%), which we flag where it matters.
 \item Intervals are paired percentile-bootstrap 95\% CIs. They resample documents, or skills, because items built on one document are
   correlated. For InjecAgent they resample attack instructions and user cases independently, a two-way pigeonhole
   bootstrap~\citep{owen2007pigeonhole}.
-\item We pre-designate one family of primary contrasts: \cond{T3}$-$\cond{T1} for every model and dataset (Table~\ref{tab:primary}).
+\item We designate one family of primary contrasts (chosen after data collection): \cond{T3}$-$\cond{T1} for every model and dataset (Table~\ref{tab:primary}).
   For these we report cluster sign-flip permutation $p$-values with Holm correction. All other intervals are secondary and
   uncorrected; the appendix lists every contrast we ran.
 \end{itemize}
@@ -384,7 +395,7 @@ Pooled rates hide which instruction wins (Table~\ref{tab:pertype}):
 \end{itemize}
 
 \textbf{Natural documents.} Compliance under plain prefill is much higher than on synthetic documents. Qwen3-4B, for example, obeys
-the override on Wikipedia documents \TypeNatOverrideFour, against \TypeSynOverrideFour\ on synthetic ones. The two task framings
+the override under plain prefill on \TypeOneNatOverrideFour\ of Wikipedia items, against \TypeOneSynOverrideFour\ of synthetic ones. The two task framings
 therefore differ: an explicit notice embedded in an encyclopedic article is apparently more salient than one in a procedure
 manual. Against this higher baseline:
 \begin{itemize}
@@ -399,9 +410,10 @@ manual. Against this higher baseline:
 documents among the four Qwen3 sizes are at 4B and 32B, and the smallest at 14B. With one model per size, and 4-bit weights at 14B and 32B, we make no claim
 about a trend. Two controls bear on the 4-bit and family questions:
 \begin{itemize}
-\item The 4-bit Qwen3-8B shows the effect on both datasets, but the magnitudes differ from bf16. It is smaller on synthetic
+\item The 4-bit Qwen3-8B shows the effect on natural documents (Holm-significant) and, uncorrected, on synthetic documents. Its
+  point estimates differ from bf16: smaller on synthetic
   documents (\ScaleSynDEightQ\ against \ScaleSynDEight) and larger on natural ones (\ScaleNatDEightQ\ against \ScaleNatDEight).
-  Quantization thus changes how large the effect is but is not needed for it, and the 14B and 32B magnitudes should be read with this
+  Quantization thus may change how large the effect is, but not its sign, and the 14B and 32B magnitudes should be read with this
   in mind.
 \item Llama-3.1-8B, a second Llama model, shows one of the largest increases on synthetic documents (\ScaleSynDLlamaEight), so the
   effect is not specific to Qwen.
@@ -421,7 +433,7 @@ data-stealing cases. Clean: injected sentence removed (every fourth case).}
 \begin{itemize}
 \item Qwen3-8B, Qwen3-14B, Qwen3-32B and Llama-3.1-8B rise by \IaDEight, \IaDFourteen, \IaDThirtyTwo\ and \IaDLlamaEight.
 \item On Qwen3-14B both case types rise: direct harm \IaDHFourteen\ and data stealing \IaDSFourteen.
-\item Qwen3-4B rises by \IaDFour; its CI touches zero.
+\item Qwen3-4B rises by \IaDFour; its CI includes zero.
 \item Llama-3.2-3B almost never calls the attacker tool in either condition, a floor.
 \end{itemize}
 With the injection removed, attacker tools are essentially never called, so the increase is caused by the injection. The
@@ -437,7 +449,7 @@ permutation test does not. Variational posteriors understate uncertainty, so we 
 \begin{itemize}
 \item A system prompt that tells the model never to follow instructions inside documents has no effect under either condition: it
   changes neither plain-prefill nor pack compliance (Appendix Table~\ref{tab:agent}).
-\item Spotlighting by datamarking~\citep{hines2024spotlighting} lowers compliance under plain prefill, to at most
+\item Spotlighting by datamarking~\citep{hines2024spotlighting} keeps plain-prefill compliance at or below
   \SpotToneFour\ (Table~\ref{tab:spotlight}). It does not stop the pack. Pack compliance is \SpotTthreeFour\ on Qwen3-4B and
   \SpotTthreeEight\ on Qwen3-8B (up from \PlainTthreeEight\ without spotlighting), so the increase is as large as without spotlighting, or larger (\SpotDFour\ and \SpotDEight). On
   Llama-3.2-3B the increase shrinks but remains (\SpotDLlama).
@@ -451,7 +463,9 @@ We did not test trained defenses such as SecAlign~\citep{chen2025secalign,chen20
 \label{tab:spotlight}
 \end{table}
 
-\textbf{Accuracy.} On clean synthetic documents, accuracy is unaffected (minimum \CleanAccMin\ across models and conditions). On
+\textbf{Accuracy.} On clean synthetic documents, accuracy under \cond{T1} and \cond{T3} is at ceiling for every model, except for
+Qwen3-32B under a pack (\CleanAccMinAll). Selective recompute lowers it further on Qwen3-32B (down to \CleanAccMinRecompute\ under
+\cond{T3B15}). On
 clean natural documents, packs significantly lower answer accuracy on \NatAccNdrop\ of \NatAccNmodels\ models, by up to
 \NatAccDLlamaEight\ (Llama-3.1-8B; Table~\ref{tab:natacc}). Qwen3-14B is unaffected (\NatAccDFourteen). Some SQuAD answers may be
 memorized. A memorized answer does not depend on how the document was encoded, so memorization would, if anything, shrink this
@@ -464,10 +478,11 @@ conversation, with no pack involved. On its own this raises compliance over plai
 exception is Qwen3-4B on natural documents, which is at ceiling.
 
 On five models, \cond{T3} differs from \cond{T1$'$} by at most 0.08 on every dataset (Appendix Table~\ref{tab:mechanism_all}). These
-differences are small, but on Llama-3.2-3B they are significant, and we do not claim equivalence. As noted in \S\ref{sec:method}, this agreement is expected under relative position encoding, so it
+differences are small, but they are significant on Llama-3.2-3B (all three datasets) and on Qwen3-14B (natural documents), and we do
+not claim equivalence. As noted in \S\ref{sec:method}, this agreement is expected under relative position encoding, so it
 shows that key re-rotation is not an artifact of our implementation. It does not by itself identify a mechanism.
 
-On two models the remaining difference---the size of the position gap between the system prompt and the document---matters:
+On two models the remaining differences---the position gap and the tool-result header---matter:
 \begin{itemize}
 \item Llama-3.1-8B obeys the pack more than masked text (\ScaleSynDMaskLlamaEight\ on synthetic documents).
 \item The 4-bit Qwen3-8B obeys it less (\ScaleSynDMaskEightQ).
@@ -481,7 +496,7 @@ On both models the masked text is still obeyed far more often than plain prefill
 \textit{Natural documents}\\[2pt]
 \input{tables/localization_nat.tex}
 \caption{Partial-mask localization: injection compliance under plain prefill (\cond{T1}), with the document's attention masked to
-the tool call only (\cond{T1Mreq}), the question text only (\cond{T1Mq}), the user turn only (\cond{T1Mcall}), or both
+the tool call only (\Mcall{}), the question text only (\Mq{}), the user turn only (\Muser{}), or both
 (\cond{T1$'$}), and under a pack (\cond{T3}). Spans are defined in Table~\ref{tab:conditions}.}
 \label{tab:localization}
 \end{table}
@@ -501,8 +516,12 @@ the tool call only (\cond{T1Mreq}), the question text only (\cond{T1Mq}), the us
   \LocSynQLlamaEight\ on Llama-3.1-8B).
 \end{itemize}
 The protective edge is therefore the one from the document to the user turn. A document encoded with sight of that turn is read as
-material for the user. A document encoded without it is obeyed as if it were an instruction, even when it saw the tool call that
+material for the user. A document encoded without it is obeyed far more often, even when it saw the tool call that
 fetched it.
+
+Mask size does not explain this pattern. On Qwen the masks hide on average \SpanUserQwen\ tokens (user turn), \SpanQQwen\ (question
+text) and \SpanCallQwen\ (tool call); on Llama they hide \SpanUserLlama, \SpanQLlama\ and \SpanCallLlama. On most models the
+question-only mask hides nearly as many tokens as the user-turn mask, yet it reproduces much less of the effect.
 
 What in the user turn matters differs by model. On some, the question's content does most of the work. On others, the mere
 structure of a preceding user message---its role header and boundaries---is enough to keep the document subordinate.
@@ -534,7 +553,7 @@ percentage points), by model and document source.}
 \centering\small
 \resizebox{\linewidth}{!}{\input{tables/attention.tex}}
 \caption{Change in attention (\cond{T3}$-$\cond{T1}, percentage points, head and layer mean) from the first answer position to the
-injected span and to the user turn (request plus tool call), by document source. Flip $-$ stay: the difference in $\Delta$
+injected span and to the conversation (user turn plus tool call), by document source. Attention was measured on five models. Flip $-$ stay: the difference in $\Delta$
 attention to the injected span between items that flip from ignoring to obeying the injection and items that do not (seed-0
 outcomes; both sources pooled). 95\% CIs are document-clustered.}
 \label{tab:attention}
@@ -542,8 +561,8 @@ outcomes; both sources pooled). 95\% CIs are document-clustered.}
 \textbf{Where the model looks.} We run the last prompt token through the model with explicit attention and measure where it
 attends (Table~\ref{tab:attention}, Figure~\ref{fig:attn_layers}). This is the position that emits the first answer token.
 \begin{itemize}
-\item \textbf{Synthetic documents.} On every model the pack raises attention to the injected span, from \AttnInjSynThirtyTwo\
-  (Qwen3-32B) to \AttnInjSynFour\ points (Qwen3-4B). It significantly lowers attention to the user turn on Qwen3-4B, Qwen3-14B and
+\item \textbf{Synthetic documents.} On all five models measured, the pack raises attention to the injected span, from \AttnInjSynThirtyTwo\
+  (Qwen3-32B) to \AttnInjSynFour\ points (Qwen3-4B). It significantly lowers attention to the conversation (user turn plus tool call) on Qwen3-4B, Qwen3-14B and
   Qwen3-32B, does not change it on Llama-3.2-3B (\AttnUserSynLlama), and raises it on Qwen3-8B (\AttnUserSynEight).
 \item \textbf{Natural documents.} The picture is mixed. Attention to the injected span rises on Llama-3.2-3B, Qwen3-14B and
   Qwen3-32B, is unchanged on Qwen3-4B, whose behavior does not change either, and falls on Qwen3-8B (\AttnInjNatEight), whose
@@ -573,7 +592,7 @@ Table~\ref{tab:mechanism}), so seam repair~\citep{li2026notes} is not a defense.
 shape depends on the model:
 \begin{itemize}
 \item On Qwen3-4B the decline is roughly linear in compute. The excess is still \SweepBfiftyFour\ at \FracBfifty\%.
-\item On Qwen3-8B and Llama-3.2-3B about half of the reduction happens in the first \FracBfifteen\% of compute. At \FracBfifty\% the
+\item On Qwen3-8B and Llama-3.2-3B half (Llama) to two-thirds (Qwen3-8B) of the reduction happens in the first \FracBfifteen\% of compute. At \FracBfifty\% the
   residual is \SweepBfiftyEight\ and \SweepBfiftyLlama.
 \item On Qwen3-14B the decline is slow: the first \FracBfifteen\% does not help at all, and \SweepBfiftyFourteen\ remains at
   \FracBfifty\%.
@@ -647,8 +666,8 @@ code line and the closing sign-off. Only \WtwoFourCone\ of tasks obey all five r
 \item A conversation-shaped pack does not help.
 \end{itemize}
 
-\textbf{Other models.} Qwen3-8B shows a smaller gain (\WtwoEightDthree). Its CI nearly touches zero, and under lenient grading it
-does (\WtwoEightDLenient). Llama-3.2-3B shows none. On both Qwen models, packs raise the standalone opening and closing
+\textbf{Other models.} Qwen3-8B shows a smaller gain (\WtwoEightDthree). Its CI has a lower bound of 0.01, and under lenient grading it
+includes zero (\WtwoEightDLenient). Llama-3.2-3B shows none. On both Qwen models, packs raise the standalone opening and closing
 directives---the same kind of directive whose injection they amplify. On Qwen3-8B and Llama, packs also weaken rules that are
 integrated with the task, such as the heading. Llama's \cond{C3M} answers are often truncated (\WtwoLlamaTruncCthreeM\%), so its
 \cond{C3M}$-$\cond{C1M} contrast is not interpretable.
@@ -669,7 +688,8 @@ Three results do not fit it cleanly:
 \begin{itemize}
 \item Chunks with no prelude at all (\cond{R3N}) are \emph{never} obeyed in the RAG layout. Whatever gains authority needs some
   context (here, the system prompt), just not the conversation.
-\item A conversation-shaped prelude lowers compliance on all three bf16 models but removes the effect on one only.
+\item A conversation-shaped prelude lowers compliance relative to the plain pack on all three bf16 models, but removes the effect on
+  one only.
 \item On natural documents, attention measurements do not track behavior on Qwen3-8B.
 \end{itemize}
 
@@ -747,13 +767,13 @@ defended system prompt.}
 \centering\small
 \resizebox{\linewidth}{!}{\input{tables/mechanism_all.tex}}
 \caption{Pack versus masked text, and conversation-shaped prelude versus text, across models and datasets (paired differences,
-clustered 95\% CIs; InjecAgent: one-way by attack).}
+clustered 95\% CIs; InjecAgent: two-way bootstrap over attacks and user cases).}
 \label{tab:mechanism_all}
 \end{table}
 
 \begin{table}[h]
 \centering\small
-\input{tables/mechanism.tex}
+\resizebox{\linewidth}{!}{\input{tables/mechanism.tex}}
 \caption{Every agent-layout contrast on synthetic documents for the three bf16 models (document-clustered 95\% CIs).}
 \label{tab:mechanism}
 \end{table}
