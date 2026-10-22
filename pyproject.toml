@@ -1,7 +1,8 @@
 [project]
 name = "skillkv"
 version = "0.1.0"
-description = "Skill -> KV packs: precompile SKILL.md into KV caches and mount them on demand (mlx-lm)."
+description = "Context-free KV reuse and prompt injection: KV packs, selective recompute and attention masking for mlx-lm."
+license = "MIT"
 requires-python = ">=3.11,<3.13"
 dependencies = ["mlx-lm>=0.32.2", "numpy>=2.0"]
 

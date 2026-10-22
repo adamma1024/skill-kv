@@ -1,6 +1,8 @@
 \documentclass[10pt]{article}
-% Submission (anonymous): \usepackage{tmlr}. Preprint with names: \usepackage[preprint]{tmlr}.
-\usepackage{tmlr}
+% Anonymous TMLR submission by default. The arXiv preprint (named authors, code link) is built by
+% scripts/build_arxiv.sh, which defines \preprintmode before this file is read.
+\providecommand{\preprintmode}{0}
+\ifnum\preprintmode=1 \usepackage[preprint]{tmlr} \else \usepackage{tmlr} \fi
 \usepackage[T1]{fontenc}
 \usepackage{microtype}
 \usepackage{booktabs}
@@ -8,6 +10,7 @@
 \usepackage{amsmath}
 \usepackage{xcolor}
 \usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, citecolor=blue!50!black, urlcolor=blue!50!black}
 \usepackage{url}
 \input{numbers.tex}
 \setlength{\emergencystretch}{1.5em}
@@ -20,8 +23,9 @@
 \title{Context-Free KV Reuse Changes What Language Models Obey}
 
 % ---- fill in for the preprint / camera-ready version --------------------------
-\author{\name Anonymous Author(s) \email anonymous@example.com \\
-      \addr Anonymous affiliation}
+\author{\name Adam Ma \email adamma2048@gmail.com \\
+      \addr Independent Researcher}
+\newcommand{\coderef}{\ifnum\preprintmode=1 at \url{https://github.com/adamma1024/skill-kv}\else (anonymized for review)\fi}
 \def\month{MM}
 \def\year{YYYY}
 \def\openreview{\url{https://openreview.net/forum?id=XXXX}}
@@ -124,7 +128,7 @@ Our findings, in order of section:
 
 Together these suggest a design rule: context-free reuse should be keyed on the trust level of the content
 (\S\ref{sec:discussion}). We release the splice and selective-recompute engines for MLX, which are tested against exact prefill,
-together with the benchmarks, all logs, and a script that generates every number in this paper from the logs.
+together with the benchmarks, all logs, and a script that generates every number in this paper from the logs \coderef.
 
 % =====================================================================================
 \section{Background and threat model}\label{sec:background}
@@ -813,7 +817,7 @@ $\rightarrow$ \cond{C3}. The question never mentions the code line, sign-off or 
 \section{Reproducibility}\label{app:repro}
 \begin{itemize}
 \item \textbf{Code.} We release the code, the data-generation scripts, the raw logs (JSONL), and the asset script that produces every
-  table, figure and number (anonymized for review).
+  table, figure and number \coderef.
 \item \textbf{Hardware and runtime.} One Apple M5 Pro laptop with 64\,GB of unified memory.
 \item \textbf{Licenses.} SQuAD is licensed CC BY-SA 4.0 and InjecAgent MIT.
 \end{itemize}

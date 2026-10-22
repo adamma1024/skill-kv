@@ -590,7 +590,14 @@ def prompts_appendix():
     from skillkv.injecagent import build_segments, load_cases
 
     ident = lambda s: [s]  # noqa: E731
+    ascii_punct = str.maketrans({"\u2013": "-", "\u2014": "--", "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"'})
+
     def show(text, limit=None):
+        import unicodedata
+        text = text.translate(ascii_punct)  # verbatim fonts lack typographic dashes and quotes
+        text = "".join(ch for ch in unicodedata.normalize("NFKD", text) if not unicodedata.combining(ch))  # e.g. e-acute -> e
+        if any(ord(ch) > 127 for ch in text):
+            raise ValueError("non-ASCII character in a verbatim prompt block; add it to ascii_punct")
         if limit and len(text) > limit:
             text = text[: limit // 2] + "\n[... truncated for display ...]\n" + text[-limit // 2:]
         out = []

@@ -10,3 +10,6 @@ paper/*.log
 paper/*.bbl
 paper/*.blg
 paper/*.out
+paper/arxiv/
+paper/arxiv.tar.gz
+paper/*.pdf.tmp
