@@ -40,9 +40,9 @@ models (Qwen3 4B--32B and Llama-3 3B and 8B) plus a 4-bit control, synthetic and
 \ScaleSynDThirtyTwo; none shows a significant decrease. The attacker needs no access to the cache, and neither a defensive system
 prompt nor spotlighting removes the increase.
 
-On the \LocNmodels\ models where we test it, the increase is localized to the missing attention from the document to the user's
-request. Blocking only that edge inside an ordinary prefill raises compliance to about the level of the pack. Blocking only the edge
-to the tool call leaves compliance at the level of plain prefill.
+A partial-mask ablation on all six models localizes the increase to the missing attention from the document to the user's turn.
+Blocking only that edge inside an ordinary prefill raises compliance to most or all of the pack's level. Blocking only the edge to
+the tool call leaves compliance at the level of plain prefill on five of six models.
 
 CacheBlend-style selective recompute shrinks the excess as more is recomputed. At about \FracBfifty\% of prefill compute, a
 significant residual remains on three of five models, so the defense costs about half a prefill.
@@ -91,9 +91,13 @@ Our findings, in order of section:
   \begin{itemize}
   \item Masking the document's attention to the conversation inside an ordinary prefill, at the true positions, raises compliance
     by about as much as the pack on most models. Key re-rotation is therefore not needed.
-  \item A partial-mask ablation localizes the effect. A document that can attend to the user's request is obeyed as rarely as under
-    plain prefill, even when it cannot attend to the tool call. A document that sees only the tool call is obeyed as often as a
-    pack.
+  \item A partial-mask ablation on six models localizes the effect to the user turn.
+    \begin{itemize}
+    \item A document that can attend to the user turn is obeyed as rarely as under plain prefill on five models, even when it
+      cannot attend to the tool call.
+    \item A document that sees only the tool call is obeyed nearly as often as a pack.
+    \item Masking only the question text reproduces part of the effect, and how much depends on the model.
+    \end{itemize}
   \item Attention from the first answer token to the injected span rises under a pack on synthetic documents for every model,
     but not consistently on natural documents.
   \end{itemize}
@@ -481,20 +485,30 @@ the tool call only (\cond{T1Mreq}), the question text only (\cond{T1Mq}), the us
 (\cond{T1$'$}), and under a pack (\cond{T3}). Spans are defined in Table~\ref{tab:conditions}.}
 \label{tab:localization}
 \end{table}
-\textbf{Which edge matters.} Table~\ref{tab:localization} masks only one part of the conversation. On all four models tested, the
-result is the same:
+\textbf{Which edge matters.} Table~\ref{tab:localization} masks only one part of the conversation, on all six models.
 \begin{itemize}
-\item \textbf{Request visible, call masked.} Compliance stays at the level of plain prefill. Relative to \cond{T1}, it changes by
-  \LocSynReqFour, \LocSynReqEight, \LocSynReqLlama\ and \LocSynReqFourteen\ on synthetic documents (Qwen3-4B, Qwen3-8B,
-  Llama-3.2-3B, Qwen3-14B). On natural documents the changes are at most 0.09 in either direction.
-\item \textbf{Call visible, request masked.} Compliance rises to the level of the pack or above. On synthetic documents the rise is
-  \LocSynCallFour, \LocSynCallEight, \LocSynCallLlama\ and \LocSynCallFourteen; on natural documents it is up to \LocNatCallLlama\
-  (Llama-3.2-3B).
+\item \textbf{User turn visible, call masked.} On five models compliance stays at the level of plain prefill. On synthetic
+  documents it changes by at most \LocSynReqFourteen\ (Qwen3-14B) relative to \cond{T1}; on natural documents it changes by at
+  most 0.09 in either direction. Qwen3-32B is the exception. Seeing the user turn removes most, but not all, of its increase: it
+  remains \LocSynReqThirtyTwo\ on synthetic and \LocNatReqThirtyTwo\ on natural documents, against \ScaleSynDThirtyTwo\ and
+  \ScaleNatDThirtyTwo\ for the pack.
+\item \textbf{Call visible, user turn masked.} Compliance rises to most or all of the pack's level on every model. On synthetic
+  documents the rise is \LocSynCallFour, \LocSynCallEight, \LocSynCallLlama, \LocSynCallFourteen, \LocSynCallThirtyTwo\ and
+  \LocSynCallLlamaEight\ (Qwen3-4B, Qwen3-8B, Llama-3.2-3B, Qwen3-14B, Qwen3-32B, Llama-3.1-8B).
+\item \textbf{Only the question text masked.} With the role headers and the tool call visible, the effect is partial. It is
+  large on Qwen3-32B (\LocSynQThirtyTwo\ synthetic, \LocNatQThirtyTwo\ natural) and moderate on Qwen3-4B and Qwen3-8B
+  (\LocSynQFour\ and \LocSynQEight\ synthetic). It is absent on Qwen3-14B and on both Llama models with synthetic documents (e.g.
+  \LocSynQLlamaEight\ on Llama-3.1-8B).
 \end{itemize}
-The protective edge is therefore the one from the document to the user's request. A document encoded with sight of the request is
-read as material for that request. A document encoded without it is obeyed as if it were an instruction, even when it saw the tool
-call that fetched it. This is an intervention on attention, not a correlation. It accounts for most of the pack effect, although
-position also matters on two models (above). \pending{T1Mq: masking only the question text, with the role headers visible.}
+The protective edge is therefore the one from the document to the user turn. A document encoded with sight of that turn is read as
+material for the user. A document encoded without it is obeyed as if it were an instruction, even when it saw the tool call that
+fetched it.
+
+What in the user turn matters differs by model. On some, the question's content does most of the work. On others, the mere
+structure of a preceding user message---its role header and boundaries---is enough to keep the document subordinate.
+
+These are interventions on attention, not correlations. They account for most of the pack effect, although position also matters
+on two models (above).
 
 \textbf{Conversation-shaped prelude.} A pack built after a content-free question and tool call (\cond{T3G}) behaves differently by
 model (Appendix Table~\ref{tab:mechanism_all}):
@@ -566,7 +580,10 @@ shape depends on the model:
 \item On Qwen3-32B a residual of \SweepBfiftyThirtyTwo\ remains at \FracBfifty\%.
 \end{itemize}
 Deviation-based selection at \FracBfifteen\% of compute (\cond{T3B15}) lowers compliance slightly more than random selection at 15\%
-(\cond{T3R15}; Appendix Table~\ref{tab:mechanism}), but the two differ in compute. \pending{T3R15F: compute-matched random.} On InjecAgent, \FracBfifteen\%
+(\cond{T3R15}; Appendix Table~\ref{tab:mechanism}), but the two differ in compute. At equal compute, with two fully recomputed
+layers added to random selection (\cond{T3R15F}, \FracRandomF\%), deviation selection is still slightly better: \InjDevRandFour,
+\InjDevRandEight\ and \InjDevRandLlama\ on the three bf16 models. The two extra layers barely help random selection
+(\cond{T3R15F}$-$\cond{T3}: \InjRandFFour, \InjRandFEight, \InjRandFLlama). On InjecAgent, \FracBfifteen\%
 recompute leaves almost the whole increase. The residual over text is \IaResidFourteen\ on Qwen3-14B and \IaResidLlamaEight\ on
 Llama-3.1-8B (Table~\ref{tab:injecagent}).
 

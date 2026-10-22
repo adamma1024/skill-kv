@@ -265,7 +265,7 @@ def w2():
 # ---------------------------------------------------------------- W3-W6 (injection)
 def injection():
     w3 = load("w3_*.jsonl")
-    agent = load("w5_*.jsonl") + [r for r in w3 if r["cond"] in ("T2", "T3G") and not r["defended"]]
+    agent = load("w5_*.jsonl") + load("w12_*.jsonl") + [r for r in w3 if r["cond"] in ("T2", "T3G") and not r["defended"]]
     defended = [r for r in w3 if r["defended"]]
     rag = load("w6_*.jsonl")
     cl = lambda r: (r["tag"], r["doc"])  # noqa: E731
@@ -305,7 +305,8 @@ def injection():
                  ("T3L16", "T3", r"T3L16 $-$ T3 (last 16 recomputed)"),
                  ("T3R15", "T3", r"T3R15 $-$ T3 (random 15\%)"),
                  ("T3B15", "T3", r"T3B15 $-$ T3 (deviation 15\%)"),
-                 ("T3B15", "T3R15", r"T3B15 $-$ T3R15 (deviation vs random)"),
+                 ("T3R15F", "T3", r"T3R15F $-$ T3 (random 15\% + 2 full layers)"),
+                 ("T3B15", "T3R15F", r"T3B15 $-$ T3R15F (deviation vs random, equal compute)"),
                  ("T3B15", "T1", r"T3B15 $-$ T1 (residual)"),
                  ("T2", "T1", r"T2 $-$ T1 (system-prompt placement)")]
     lines = [r"\begin{tabular}{lrrr}", r"\toprule", r"Contrast & Qwen3-4B & Qwen3-8B & Llama-3.2-3B \\", r"\midrule"]
@@ -339,6 +340,8 @@ def injection():
         m(f"InjDG{n}", fmt_ci(paired(rs, "T3G", "T1", key, "complied", cl), signed=True))
         m(f"InjDMask{n}", fmt_ci(paired(rs, "T3", "T1M", key, "complied", cl), signed=True))
         m(f"InjResid{n}", fmt_ci(paired(rs, "T3B15", "T1", key, "complied", cl), signed=True))
+        m(f"InjDevRand{n}", fmt_ci(paired(rs, "T3B15", "T3R15F", key, "complied", cl), signed=True))
+        m(f"InjRandF{n}", fmt_ci(paired(rs, "T3R15F", "T3", key, "complied", cl), signed=True))
         m(f"InjOvTone{n}", f"{rate(agent, mid, 'T1', kind='override'):.2f}")
         m(f"InjOvTthree{n}", f"{rate(agent, mid, 'T3', kind='override'):.2f}")
         m(f"InjOvTthreeG{n}", f"{rate(agent, mid, 'T3G', kind='override'):.2f}")
@@ -356,6 +359,7 @@ def injection():
     m("InjNdocs", str(len({cl(r) for r in agent if r["model"] == MODELS[0][0]})))
     m("FracBlend", f"{mean(r['recompute_fraction'] for r in agent if r['cond'] == 'T3B15'):.2f}")
     m("FracRandom", f"{mean(r['recompute_fraction'] for r in agent if r['cond'] == 'T3R15'):.2f}")
+    m("FracRandomF", f"{100 * mean(r['recompute_fraction'] for r in agent if r['cond'] == 'T3R15F'):.0f}")
     shares = [(rate(agent, mid, "T3") - rate(agent, mid, "T3B15")) / (rate(agent, mid, "T3") - rate(agent, mid, "T1"))
               for mid, _, _ in MODELS]
     m("MitigShareRange", f"{100 * min(shares):.0f}--{100 * max(shares):.0f}")

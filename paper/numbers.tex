@@ -25,12 +25,13 @@
 \newcommand{\AttnUserSynLlama}{$-$0.10 [$-$0.32, 0.11]}
 \newcommand{\AttnUserSynThirtyTwo}{$-$0.33 [$-$0.39, $-$0.26]}
 \newcommand{\CleanAccMin}{1.00}
-\newcommand{\DocNgen}{22{,}031}
-\newcommand{\DocTrunc}{1}
+\newcommand{\DocNgen}{23{,}904}
+\newcommand{\DocTrunc}{2}
 \newcommand{\FracBfifteen}{20}
 \newcommand{\FracBfifty}{53}
 \newcommand{\FracBlend}{0.20}
 \newcommand{\FracRandom}{0.15}
+\newcommand{\FracRandomF}{20}
 \newcommand{\GlmmEight}{+2.86 (0.21)}
 \newcommand{\GlmmFour}{+1.07 (0.18)}
 \newcommand{\GlmmFourteen}{+3.25 (0.21)}
@@ -141,6 +142,9 @@
 \newcommand{\InjDefTthreeEight}{0.22}
 \newcommand{\InjDefTthreeFour}{0.51}
 \newcommand{\InjDefTthreeLlama}{0.16}
+\newcommand{\InjDevRandEight}{$-$0.08 [$-$0.15, 0.00]}
+\newcommand{\InjDevRandFour}{$-$0.06 [$-$0.12, 0.00]}
+\newcommand{\InjDevRandLlama}{$-$0.05 [$-$0.09, $-$0.01]}
 \newcommand{\InjNdocs}{24}
 \newcommand{\InjNinjected}{72}
 \newcommand{\InjNtrials}{144}
@@ -154,6 +158,9 @@
 \newcommand{\InjOvTthreeGFour}{0.62}
 \newcommand{\InjOvTthreeGLlama}{0.02}
 \newcommand{\InjOvTthreeLlama}{0.29}
+\newcommand{\InjRandFEight}{$-$0.03 [$-$0.07, $-$0.01]}
+\newcommand{\InjRandFFour}{$-$0.06 [$-$0.12, $-$0.01]}
+\newcommand{\InjRandFLlama}{$-$0.01 [$-$0.05, 0.01]}
 \newcommand{\InjResidEight}{+0.09 [0.04, 0.15]}
 \newcommand{\InjResidFour}{+0.29 [0.22, 0.36]}
 \newcommand{\InjResidLlama}{+0.08 [0.03, 0.15]}
@@ -168,27 +175,51 @@
 \newcommand{\LocNatCallFour}{+0.05 [0.02, 0.09]}
 \newcommand{\LocNatCallFourteen}{+0.14 [0.08, 0.20]}
 \newcommand{\LocNatCallLlama}{+0.40 [0.31, 0.48]}
+\newcommand{\LocNatCallLlamaEight}{+0.19 [0.12, 0.27]}
 \newcommand{\LocNatCallReqEight}{+0.34 [0.26, 0.43]}
 \newcommand{\LocNatCallReqFour}{+0.11 [0.06, 0.18]}
 \newcommand{\LocNatCallReqFourteen}{+0.12 [0.07, 0.18]}
 \newcommand{\LocNatCallReqLlama}{+0.35 [0.26, 0.43]}
+\newcommand{\LocNatCallReqLlamaEight}{+0.19 [0.11, 0.29]}
+\newcommand{\LocNatCallReqThirtyTwo}{+0.23 [0.16, 0.31]}
+\newcommand{\LocNatCallThirtyTwo}{+0.33 [0.26, 0.41]}
+\newcommand{\LocNatQEight}{+0.13 [0.06, 0.21]}
+\newcommand{\LocNatQFour}{+0.05 [0.01, 0.09]}
+\newcommand{\LocNatQFourteen}{+0.03 [0.01, 0.07]}
+\newcommand{\LocNatQLlama}{$-$0.03 [$-$0.11, 0.05]}
+\newcommand{\LocNatQLlamaEight}{+0.13 [0.07, 0.19]}
+\newcommand{\LocNatQThirtyTwo}{+0.38 [0.29, 0.48]}
 \newcommand{\LocNatReqEight}{$-$0.09 [$-$0.14, $-$0.04]}
 \newcommand{\LocNatReqFour}{$-$0.06 [$-$0.12, $-$0.01]}
 \newcommand{\LocNatReqFourteen}{+0.02 [0.00, 0.04]}
 \newcommand{\LocNatReqLlama}{+0.05 [0.01, 0.09]}
-\newcommand{\LocNmodels}{4}
+\newcommand{\LocNatReqLlamaEight}{+0.00 [$-$0.06, 0.05]}
+\newcommand{\LocNatReqThirtyTwo}{+0.10 [0.04, 0.17]}
+\newcommand{\LocNmodels}{6}
 \newcommand{\LocSynCallEight}{+0.33 [0.27, 0.39]}
 \newcommand{\LocSynCallFour}{+0.40 [0.35, 0.47]}
 \newcommand{\LocSynCallFourteen}{+0.12 [0.06, 0.19]}
 \newcommand{\LocSynCallLlama}{+0.22 [0.16, 0.28]}
+\newcommand{\LocSynCallLlamaEight}{+0.40 [0.30, 0.49]}
 \newcommand{\LocSynCallReqEight}{+0.33 [0.27, 0.39]}
 \newcommand{\LocSynCallReqFour}{+0.39 [0.33, 0.45]}
 \newcommand{\LocSynCallReqFourteen}{+0.09 [0.04, 0.15]}
 \newcommand{\LocSynCallReqLlama}{+0.22 [0.15, 0.29]}
+\newcommand{\LocSynCallReqLlamaEight}{+0.41 [0.31, 0.51]}
+\newcommand{\LocSynCallReqThirtyTwo}{+0.26 [0.19, 0.35]}
+\newcommand{\LocSynCallThirtyTwo}{+0.36 [0.27, 0.45]}
+\newcommand{\LocSynQEight}{+0.12 [0.06, 0.18]}
+\newcommand{\LocSynQFour}{+0.16 [0.07, 0.24]}
+\newcommand{\LocSynQFourteen}{+0.01 [$-$0.04, 0.06]}
+\newcommand{\LocSynQLlama}{+0.03 [$-$0.01, 0.08]}
+\newcommand{\LocSynQLlamaEight}{$-$0.01 [$-$0.07, 0.04]}
+\newcommand{\LocSynQThirtyTwo}{+0.29 [0.23, 0.35]}
 \newcommand{\LocSynReqEight}{+0.00 [0.00, 0.00]}
 \newcommand{\LocSynReqFour}{+0.01 [0.00, 0.03]}
 \newcommand{\LocSynReqFourteen}{+0.03 [0.01, 0.07]}
 \newcommand{\LocSynReqLlama}{+0.01 [$-$0.03, 0.04]}
+\newcommand{\LocSynReqLlamaEight}{$-$0.01 [$-$0.04, 0.02]}
+\newcommand{\LocSynReqThirtyTwo}{+0.10 [0.05, 0.15]}
 \newcommand{\MitigShareRange}{29--55}
 \newcommand{\NatAccDEight}{$-$0.07 [$-$0.14, $-$0.02]}
 \newcommand{\NatAccDEightQ}{$-$0.07 [$-$0.15, $-$0.01]}
