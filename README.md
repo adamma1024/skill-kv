@@ -49,7 +49,7 @@ The full set of runs is in `scripts/r1_queue.sh` ... `scripts/r8_queue.sh` (abou
 ```bibtex
 @article{ma2026contextfree,
   title  = {Context-Free {KV} Reuse Changes What Language Models Obey},
-  author = {Ma, Adam},
+  author = {Ma, Lin},
   year   = {2026},
   note   = {Preprint}
 }

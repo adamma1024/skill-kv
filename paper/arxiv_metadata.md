@@ -12,7 +12,7 @@ arXiv compiles `main.tex` with pdflatex and reads `main.bbl`.
 Context-Free KV Reuse Changes What Language Models Obey
 
 **Authors:**
-Adam Ma
+Lin Ma
 
 **Comments:**
 27 pages, 3 figures. Code, data and logs: https://github.com/adamma1024/skill-kv
