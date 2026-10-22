@@ -939,6 +939,9 @@ def template():
             ts = [r for r in t if r["tag"].startswith(src)]
             # the template run uses one sampling seed; compare to seed 0 of the main runs
             hs = [r for r in ref if r["model"] == mid and r["seed"] == 0]
+            for c in ("T1", "T3"):
+                m(f"TplRate{c.replace('1', 'one').replace('3', 'three')}{'Nat' if src == 'nat' else 'Syn'}{tag}",
+                  f"{mean(float(r['complied']) for r in ts if r['cond'] == c):.2f}")
             for rows_, name in ((hs, "Hand"), (ts, "Tpl")):
                 d = fmt_ci(paired(rows_, "T3", "T1", SYN_KEY, "complied", SYN_CL), True)
                 cells.append(d)

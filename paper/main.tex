@@ -272,8 +272,8 @@ Condition & How the tool result (document / skill) enters the cache \\
 \item Llama-3.2-3B-Instruct and Llama-3.1-8B-Instruct (bf16)~\citep{grattafiori2024llama3}.
 \end{itemize}
 All models run on one Apple M5 Pro laptop (64\,GB) with MLX 0.32.4 and mlx-lm 0.32.2. Prompts are assembled from strings in each
-model's chat format; Appendix~\ref{app:prompts} gives the exact templates. They deviate from the official chat templates in two minor
-ways, and a robustness check with the official templates is in \S\ref{sec:robust}:
+model's chat format; Appendix~\ref{app:prompts} gives the exact templates. They deviate from the official chat templates in two
+ways; a robustness check with the official templates is in \S\ref{sec:robust}:
 \begin{itemize}
 \item Qwen: the earlier assistant turn keeps an empty thinking block;
 \item Llama: the system header lacks the date preamble, and the tool content is not JSON-quoted.
@@ -595,7 +595,18 @@ This layout differs in role, number of documents and tool use, so it is a contra
 \label{tab:template}
 \end{table}
 We rendered the full prompt with each tokenizer's \texttt{apply\_chat\_template}, split it at the document, and repeated
-\cond{T1}/\cond{T3} (Table~\ref{tab:template}). \pending{template result}
+\cond{T1}/\cond{T3} (Table~\ref{tab:template}).
+\begin{itemize}
+\item \textbf{Qwen3-4B.} The official template changes only the empty thinking block. On synthetic documents the increase remains
+  (\TplTplSynFour, against \TplHandSynFour\ with our prompts). On natural documents both conditions are at ceiling.
+\item \textbf{Llama-3.2-3B, natural documents.} The increase remains (\TplTplNatLlama, against \TplHandNatLlama).
+\item \textbf{Llama-3.2-3B, synthetic documents.} The official template JSON-escapes the tool output, so the document's newlines
+  become literal \texttt{\textbackslash n} sequences inside a quoted string. Under this encoding Llama-3.2-3B almost never obeys the
+  synthetic injections under either condition (\TplRateToneSynLlama\ and \TplRateTthreeSynLlama), so the contrast
+  (\TplTplSynLlama) sits at a floor and is uninformative.
+\end{itemize}
+The effect therefore survives the official templates wherever there is room for it, with somewhat smaller magnitudes. Escaping
+tool output may itself act as a weak form of data marking; we did not test this separately.
 
 \subsection{Trusted skills}\label{sec:skills}
 \begin{figure}[t]
@@ -673,6 +684,8 @@ Three results do not fit it cleanly:
 \item \textbf{Defenses.} We test prompt-level defenses only, not trained ones such as StruQ or SecAlign.
 \item \textbf{Data.} The synthetic documents and skills are templated, and the canary injections are explicit, also in the natural
   documents.
+\item \textbf{Prompt format.} Our main runs use hand-assembled prompts. With official templates the effect is smaller, and on
+  Llama-3.2-3B with synthetic documents, where the template JSON-escapes tool output, it is at a floor (\S\ref{sec:robust}).
 \item \textbf{Agents.} Our InjecAgent variant measures only the first attacker call in a single turn. Multi-step agents (e.g.,
   AgentDojo~\citep{debenedetti2024agentdojo}) and harmful outcomes rather than canaries remain to be tested.
 \item \textbf{Skills.} The skill benefit is clear on one model only, and it is matched by system-prompt placement.
