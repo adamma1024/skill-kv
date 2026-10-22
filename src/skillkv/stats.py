@@ -19,6 +19,33 @@ def boot_ci(items, n: int = 2000, seed: int = 0) -> tuple[float, float]:
     return ms[int(0.025 * n)], ms[int(0.975 * n)]
 
 
+def boot_ci2(items, n: int = 2000, seed: int = 0) -> tuple[float, float]:
+    """items: (cluster_a, cluster_b, value) for two crossed factors (e.g. attack x user case).
+    Pigeonhole bootstrap (Owen, 2007): resample levels of each factor independently and weight
+    each observation by the product of its levels' multiplicities. 95% percentile interval."""
+    if not items:
+        return float("nan"), float("nan")
+    a_lv = sorted({a for a, _, _ in items}, key=str)
+    b_lv = sorted({b for _, b, _ in items}, key=str)
+    rng = random.Random(seed)
+    ms = []
+    for _ in range(n):
+        wa, wb = defaultdict(int), defaultdict(int)
+        for k in rng.choices(a_lv, k=len(a_lv)):
+            wa[k] += 1
+        for k in rng.choices(b_lv, k=len(b_lv)):
+            wb[k] += 1
+        num = den = 0.0
+        for a, b, v in items:
+            w = wa[a] * wb[b]
+            num += w * v
+            den += w
+        if den:
+            ms.append(num / den)
+    ms.sort()
+    return ms[int(0.025 * len(ms))], ms[int(0.975 * len(ms))]
+
+
 def fmt(items) -> str:
     if not items:
         return "—"

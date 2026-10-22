@@ -120,3 +120,17 @@ def test_perm_test_and_holm():
     shifted = [(c, 0.3 + (0.05 if i % 2 else -0.05)) for c in range(20) for i in range(4)]
     assert perm_test(shifted, n=2000) < 0.01
     assert holm([0.01, 0.04, 0.03]) == [0.03, 0.06, 0.06]
+
+
+def test_boot_ci2_two_way_clusters():
+    """Pigeonhole bootstrap over two crossed factors: wider than one-way when the second factor
+    carries variance, and degenerate (zero width) when every value is equal."""
+    import random
+    from skillkv.stats import boot_ci, boot_ci2
+    rng = random.Random(0)
+    user = {u: rng.gauss(0, 1) for u in range(12)}
+    items = [(a, u, user[u] + rng.gauss(0, 0.1)) for a in range(12) for u in range(12)]
+    lo2, hi2 = boot_ci2(items)
+    lo1, hi1 = boot_ci([(a, v) for a, _, v in items])
+    assert lo2 < hi2 and (hi2 - lo2) > 2 * (hi1 - lo1)
+    assert boot_ci2([(a, u, 0.5) for a in range(4) for u in range(4)]) == (0.5, 0.5)

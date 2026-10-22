@@ -51,7 +51,8 @@ def main() -> None:
     cases = load_cases(args.data, args.stride, args.setting)[: args.limit]
     done = set()
     if out.exists():
-        done = {(r["kind"], r["index"], r["variant"], r["cond"]) for r in map(json.loads, out.read_text().splitlines()) if r}
+        done = {(r["kind"], r["index"], r["variant"], r["cond"]) for r in map(json.loads, out.read_text().splitlines())
+                if r and r["seed"] == args.seed}
 
     model, tok = load(args.model)
     enc = lambda s: tok.encode(s, add_special_tokens=False)  # noqa: E731

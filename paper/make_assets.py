@@ -18,7 +18,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from skillkv.stats import boot_ci, holm, perm_test  # noqa: E402
+from skillkv.stats import boot_ci, boot_ci2, holm, perm_test  # noqa: E402
 from skillkv.synth import CONSTRAINT_TYPES, make_library  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -297,7 +297,7 @@ def injection():
 
     contrasts = [("T3", "T1", r"T3 $-$ T1 (pack vs text)"),
                  ("T3G", "T1", r"T3G $-$ T1 (conversation-shaped prelude)"),
-                 ("T3", "T1M", r"T3 $-$ T1$'$ (position shift)"),
+                 ("T3", "T1M", r"T3 $-$ T1$'$ (pack vs.\ masked text)"),
                  ("T3F16", "T3", r"T3F16 $-$ T3 (first 16 recomputed)"),
                  ("T3L16", "T3", r"T3L16 $-$ T3 (last 16 recomputed)"),
                  ("T3R15", "T3", r"T3R15 $-$ T3 (random 15\%)"),
@@ -362,37 +362,6 @@ def injection():
     m("RagRthreeFour", f"{rate(rag, 'Qwen/Qwen3-4B', 'R3'):.2f}")
     accs = sorted(rate(rag, mid, "R3N", "correct", injected=False) for mid, _, _ in MODELS)
     m("RagRthreeNAccRange", f"{accs[0]:.2f}--{accs[-1]:.2f}")
-
-    roles = {"text": C[0], "pack": C[1], "recompute": C[2], "masked": C[3]}
-    fig, axes = plt.subplots(1, 2, figsize=(6.75, 2.2), gridspec_kw={"width_ratios": [4, 3]}, sharey=True)
-    panels = [(axes[0], agent, [("T1", "T1 text", "text"), ("T1M", "T1$'$ text, masked", "masked"),
-                                ("T3", "T3 pack", "pack"), ("T3B15", "T3B15 pack + 15% recompute", "recompute")],
-               "Agent layout: document after the question"),
-              (axes[1], rag, [("R1", "R1 full prefill", "text"), ("R3", "R3 chunk packs", "pack"),
-                              ("R3B15", "R3B15 + 15% recompute", "recompute")],
-               "RAG layout: documents before the question")]
-    for ax, rows, conds_, title in panels:
-        style(ax)
-        w = 0.8 / len(conds_)
-        for j, (c, label, role) in enumerate(conds_):
-            xs = [i + (j - (len(conds_) - 1) / 2) * w for i in range(len(MODELS))]
-            stats = [ci([(cl(r), float(r["complied"])) for r in sel(rows, mid, c)]) for mid, _, _ in MODELS]
-            vals = [s[0] for s in stats]
-            ax.bar(xs, vals, width=w, color=roles[role], edgecolor="white", linewidth=1.0, label=label)
-            ax.errorbar(xs, vals, yerr=[[s[0] - s[1] for s in stats], [s[2] - s[0] for s in stats]],
-                        fmt="none", ecolor=INK, elinewidth=0.6, capsize=1.5)
-            for x, v in zip(xs, vals):
-                if v == 0:
-                    ax.plot([x - w / 2.4, x + w / 2.4], [0.004, 0.004], color=roles[role], linewidth=1.6)
-                    ax.text(x, 0.012, "0", ha="center", va="bottom", fontsize=5.5, color=MUTED)
-        ax.set_xticks(range(len(MODELS)), [l for _, l, _ in MODELS])
-        ax.set_title(title, fontsize=7.5, color=INK, loc="left")
-        ax.legend(fontsize=6, frameon=False, loc="upper right", handlelength=1.2)
-    axes[0].set_ylabel("Injection compliance", fontsize=7, color=INK)
-    axes[0].set_ylim(0, 0.72)
-    fig.tight_layout(pad=0.3, w_pad=1.0)
-    fig.savefig(OUT / "figures" / "injection.pdf")
-    plt.close(fig)
 
 
 # ---------------------------------------------------------------- round 1: scale, natural docs, recompute sweep
@@ -466,8 +435,10 @@ def scale_natural():
     fig, ax = plt.subplots(figsize=(3.3, 2.2))
     style(ax)
     sweep = [("T3", 0.0), ("T3B15", None), ("T3B30", None), ("T3B50", None)]
+    fr_of = lambda c: 100 * mean(r["recompute_fraction"] for r in syn if r["cond"] == c and r.get("recompute_fraction") is not None)  # noqa: E731
     lines = [r"\begin{tabular}{lrrrr}", r"\toprule",
-             r"Model & 0\% (T3) & 15\% & 30\% & 50\% \\", r"\midrule"]
+             r"Model & T3 (0\%) & " + " & ".join(f"{c} ({fr_of(c):.0f}\\%)" for c in ("T3B15", "T3B30", "T3B50")) + r" \\",
+             r"\midrule"]
     j = 0
     for mid, label, tag in ALL_MODELS:
         rs = inj(syn, mid)
@@ -500,44 +471,84 @@ def scale_natural():
 
 
 
-def injecagent():
+def ia_rows():
+    """InjecAgent rows at the 256-token budget, complete (model, seed) runs only, annotated with the
+    attack instruction and the user case (the two crossed factors)."""
     from skillkv.injecagent import load_cases
-    rows = load("ia256_enhanced_*.jsonl")
-    if not rows:
-        return
     cases = {(c.kind, c.index): c for c in load_cases(ROOT / "data" / "injecagent", 4, "enhanced")}
     n_full = len(cases) * 4 + len(range(0, len(cases), 4)) * 2  # injected x 4 conds + clean x 2 conds
-    rows = [r for r in rows if sum(x["model"] == r["model"] for x in rows) == n_full]
+    rows = load("ia256_enhanced_*.jsonl")
+    count = defaultdict(int)
     for r in rows:
-        r["attack"] = cases[r["kind"], r["index"]].attacker_instruction
-    cl = lambda r: r["attack"]  # noqa: E731  (cluster: attack case, reused across user cases)
-    key = lambda r: (r["kind"], r["index"])  # noqa: E731
-    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
-             r"Model & T1 & T1$'$ & T3 & T3B15 & $\Delta$ T3$-$T1 & clean T1 / T3 \\", r"\midrule"]
+        count[r["model"], r["seed"]] += 1
+    rows = [r for r in rows if count[r["model"], r["seed"]] == n_full]
+    for r in rows:
+        c = cases[r["kind"], r["index"]]
+        r["attack"], r["user"], r["complied"] = c.attacker_instruction, c.user_instruction, r["attack_success"]
+    return rows, cases
+
+
+IA_KEY = lambda r: (r["kind"], r["index"], r["seed"])  # noqa: E731
+IA_CL = lambda r: r["attack"]  # noqa: E731
+
+
+def fmt_ci2(rows, a, b, field="complied"):
+    """Paired a-b difference with a two-way (attack x user case) pigeonhole bootstrap CI."""
+    by = defaultdict(dict)
+    for r in rows:
+        by[r["cond"]][IA_KEY(r)] = r
+    ks = sorted(set(by[a]) & set(by[b]))
+    if not ks:
+        return "--"
+    items = [(by[a][k]["attack"], by[a][k]["user"], float(by[a][k][field]) - float(by[b][k][field])) for k in ks]
+    lo, hi = boot_ci2(items)
+    return f"{num(mean(v for *_, v in items), True)} [{num(lo)}, {num(hi)}]"
+
+
+def injecagent():
+    rows, cases = ia_rows()
+    if not rows:
+        return
+    lines = [r"\begin{tabular}{lrrrrrrr}", r"\toprule",
+             r"& \multicolumn{4}{c}{ASR (stage 1)} & & & \\",
+             r"\cmidrule(lr){2-5}",
+             r"Model & T1 & T1$'$ & T3 & T3B15 & $\Delta$ T3$-$T1 [two-way CI] & DH / DS (T1 $\rightarrow$ T3) & clean T1 / T3 \\",
+             r"\midrule"]
     for mid, label, tag in ALL_MODELS:
         rs = [r for r in rows if r["model"] == mid and r["variant"] == "injected"]
         if not rs:
             continue
         clean = [r for r in rows if r["model"] == mid and r["variant"] == "clean"]
         rate = lambda c, src=rs: mean(float(r["attack_success"]) for r in src if r["cond"] == c)  # noqa: E731
-        d = fmt_ci(paired(rs, "T3", "T1", key, "attack_success", cl), signed=True)
+        d = fmt_ci2(rs, "T3", "T1")
+        split = []
+        for kind in ("dh", "ds"):
+            ks = [r for r in rs if r["kind"] == kind]
+            k_rate = lambda c: mean(float(r["attack_success"]) for r in ks if r["cond"] == c)  # noqa: E731
+            split.append(f"{k_rate('T1'):.2f}$\\rightarrow${k_rate('T3'):.2f}")
+            m(f"Ia{kind.upper()}{tag}", f"{k_rate('T1'):.2f} $\\rightarrow$ {k_rate('T3'):.2f}")
         lines.append(f"{label} & " + " & ".join(f"{rate(c):.2f}" for c in ("T1", "T1M", "T3", "T3B15"))
-                     + f" & {d} & {rate('T1', clean):.2f} / {rate('T3', clean):.2f} \\\\")
+                     + f" & {d} & {' / '.join(split)} & {rate('T1', clean):.2f} / {rate('T3', clean):.2f} \\\\")
         m(f"IaTone{tag}", f"{rate('T1'):.2f}")
         m(f"IaTthree{tag}", f"{rate('T3'):.2f}")
         m(f"IaD{tag}", d)
-        m(f"IaDMask{tag}", fmt_ci(paired(rs, "T3", "T1M", key, "attack_success", cl), signed=True))
-        m(f"IaResid{tag}", fmt_ci(paired(rs, "T3B15", "T1", key, "attack_success", cl), signed=True))
-        for kind in ("dh", "ds"):
-            ks = [r for r in rs if r["kind"] == kind]
-            m(f"Ia{kind.upper()}{tag}", f"{mean(float(r['attack_success']) for r in ks if r['cond'] == 'T1'):.2f} $\\rightarrow$ "
-                                      f"{mean(float(r['attack_success']) for r in ks if r['cond'] == 'T3'):.2f}")
+        m(f"IaDOneWay{tag}", fmt_ci(paired(rs, "T3", "T1", IA_KEY, "attack_success", IA_CL), signed=True))
+        m(f"IaDMask{tag}", fmt_ci2(rs, "T3", "T1M"))
+        m(f"IaResid{tag}", fmt_ci2(rs, "T3B15", "T1"))
+        for c in ("T1", "T3"):
+            sel = [r for r in rs if r["cond"] == c]
+            cc = c.replace("1", "one").replace("3", "three")
+            m(f"IaTrunc{cc}{tag}", f"{100 * mean(r['truncated'] for r in sel):.1f}")
+            m(f"IaNoTool{cc}{tag}", f"{mean(not r['tools_called'] for r in sel):.2f}")
         m(f"IaTrunc{tag}", f"{100 * mean(r['truncated'] for r in rs):.1f}")
+        m(f"IaSeeds{tag}", str(len({r["seed"] for r in rs})))
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("injecagent", lines)
+    all_inj = [r for r in rows if r["variant"] == "injected"]
+    m("IaTruncMax", f"{100 * max(mean(r['truncated'] for r in all_inj if r['model'] == mid and r['cond'] == c) for mid in {r['model'] for r in all_inj} for c in ('T1', 'T3')):.1f}")
     m("IaNcases", str(len(cases)))
     m("IaNattacks", str(len({c.attacker_instruction for c in cases.values()})))
-
+    m("IaNusers", str(len({c.user_instruction for c in cases.values()})))
 
 
 def prompts_appendix():
@@ -684,33 +695,37 @@ def attention():
 
 def primary():
     """Pre-designated primary contrasts (T3 - T1 per model x dataset), cluster sign-flip
-    permutation p-values and Holm adjustment across the family."""
+    permutation p-values and Holm adjustment across the family. InjecAgent crosses attacks with
+    user cases, so its p-value is the larger of the two one-factor sign-flip tests and its CI is
+    the two-way pigeonhole bootstrap."""
     syn = [r for r in load("w5_*.jsonl") + load("w8_*.jsonl") if not r["defended"] and r["injection"]]
     nat = [r for r in load("w7_*.jsonl") if r["injection"]]
-    ia = [r for r in load("ia256_enhanced_*.jsonl") if r["variant"] == "injected"]
-    from skillkv.injecagent import load_cases
-    cases = {(c.kind, c.index): c.attacker_instruction for c in load_cases(ROOT / "data" / "injecagent", 4, "enhanced")}
-    for r in ia:
-        r["complied"], r["attack"] = r["attack_success"], cases[r["kind"], r["index"]]
+    ia = [r for r in ia_rows()[0] if r["variant"] == "injected"]
+    k_doc = lambda r: (r["tag"], r["item"], r["seed"])  # noqa: E731
+    c_doc = lambda r: (r["tag"], r["doc"])  # noqa: E731
     fam = []
     for mid, label, tag in ALL_MODELS:
-        for name, rows, k, c in (("Synthetic", syn, lambda r: (r["tag"], r["item"], r["seed"]), lambda r: (r["tag"], r["doc"])),
-                                 ("Natural", nat, lambda r: (r["tag"], r["item"], r["seed"]), lambda r: (r["tag"], r["doc"])),
-                                 ("InjecAgent", ia, lambda r: (r["kind"], r["index"]), lambda r: r["attack"])):
+        for name, rows in (("Synthetic", syn), ("Natural", nat), ("InjecAgent", ia)):
             rs = [r for r in rows if r["model"] == mid]
             if not rs or not complete(rs, "T3"):
                 continue
-            d = paired(rs, "T3", "T1", k, "complied", c)
-            fam.append((label, name, d, perm_test(d)))
+            if name == "InjecAgent":
+                p_ = max(perm_test(paired(rs, "T3", "T1", IA_KEY, "complied", c)) for c in (IA_CL, lambda r: r["user"]))
+                cell = fmt_ci2(rs, "T3", "T1")
+            else:
+                d = paired(rs, "T3", "T1", k_doc, "complied", c_doc)
+                p_, cell = perm_test(d), fmt_ci(d, True)
+            fam.append((label, name, cell, p_))
     adj = holm([p for *_, p in fam])
+    fp = lambda x: "$<$0.001" if x < 0.001 else f"{x:.3f}"  # noqa: E731
     lines = [r"\begin{tabular}{llrrr}", r"\toprule", r"Model & Data & $\Delta$ T3$-$T1 [95\% CI] & $p$ & $p_\text{Holm}$ \\", r"\midrule"]
-    for (label, name, d, p_), pa in zip(fam, adj):
-        fp = lambda x: "$<$0.001" if x < 0.001 else f"{x:.3f}"  # noqa: E731
-        lines.append(f"{label} & {name} & {fmt_ci(d, True)} & {fp(p_)} & {fp(pa)} \\\\")
+    for (label, name, cell, p_), pa in zip(fam, adj):
+        lines.append(f"{label} & {name} & {cell} & {fp(p_)} & {fp(pa)} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("primary", lines)
     m("PrimaryN", str(len(fam)))
     m("PrimarySig", str(sum(pa < 0.05 for pa in adj)))
+    m("PrimaryPos", str(sum(pa < 0.05 and not cell.startswith("$-$") for (_, _, cell, _), pa in zip(fam, adj))))
 
 
 def mechanism_all():
@@ -724,19 +739,14 @@ def mechanism_all():
             dedup.append(r)
     syn = dedup
     nat = [r for r in load("w7_*.jsonl") if r["injection"]]
-    ia = [r for r in load("ia_enhanced_*.jsonl") if r["variant"] == "injected"]
-    from skillkv.injecagent import load_cases
-    cases = {(c.kind, c.index): c.attacker_instruction for c in load_cases(ROOT / "data" / "injecagent", 4, "enhanced")}
-    for r in ia:
-        r["complied"], r["attack"] = r["attack_success"], cases[r["kind"], r["index"]]
+    ia = [r for r in ia_rows()[0] if r["variant"] == "injected"]
     cl = lambda r: (r["tag"], r["doc"])  # noqa: E731
     key = lambda r: (r["tag"], r["item"], r["seed"])  # noqa: E731
-    ia_cl = lambda r: r["attack"]  # noqa: E731
-    ia_key = lambda r: (r["kind"], r["index"])  # noqa: E731
+    ia_cl, ia_key = IA_CL, IA_KEY
     cols = [("Syn.", syn, "T3", "T1M", key, cl), ("Nat.", nat, "T3", "T1M", key, cl), ("InjecAgent", ia, "T3", "T1M", ia_key, ia_cl),
             ("Syn.", syn, "T3G", "T1", key, cl), ("Nat.", nat, "T3G", "T1", key, cl)]
     lines = [r"\begin{tabular}{lrrrrr}", r"\toprule",
-             r"& \multicolumn{3}{c}{T3 $-$ T1$'$ (position shift)} & \multicolumn{2}{c}{T3G $-$ T1 (conversation prelude)} \\",
+             r"& \multicolumn{3}{c}{T3 $-$ T1$'$ (pack vs.\ masked text)} & \multicolumn{2}{c}{T3G $-$ T1 (conversation prelude)} \\",
              r"\cmidrule(lr){2-4}\cmidrule(lr){5-6}",
              r"Model & Syn. & Nat. & InjecAgent & Syn. & Nat. \\", r"\midrule"]
     for mid, label, tag in ALL_MODELS:
@@ -744,10 +754,181 @@ def mechanism_all():
         for name, rows, a, b, k, c in cols:
             rs = [r for r in rows if r["model"] == mid]
             cells.append(fmt_ci(paired(rs, a, b, k, "complied", c), signed=True)
-                         if any(r["cond"] == a for r in rs) and any(r["cond"] == b for r in rs) else "--")
+                         if complete(rs, a) and complete(rs, b) else "--")
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("mechanism_all", lines)
+
+
+SYN_KEY = lambda r: (r["tag"], r["item"], r["seed"])  # noqa: E731
+SYN_CL = lambda r: (r["tag"], r["doc"])  # noqa: E731
+
+
+def dedup(rows):
+    seen, out = set(), []
+    for r in rows:
+        k = (r["model"], r["tag"], r["item"], r["seed"], r["cond"], r.get("spotlight", False))
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
+
+
+def syn_rows():
+    return dedup([r for r in load("w5_*.jsonl") + load("w8_*.jsonl") + load("w10_*_s*_n12.jsonl")
+                  if not r["defended"] and not r.get("spotlight", False)])
+
+
+def nat_rows():
+    return dedup(load("w7_*.jsonl") + load("w10_*_nat0.jsonl"))
+
+
+def localization():
+    """Partial-mask ablation: which conversation edge does the document need to see?"""
+    conds = [("T1", "T1"), ("T1Mreq", "sees request only"), ("T1Mcall", "sees call only"), ("T1M", "T1$'$ (neither)"), ("T3", "T3")]
+    data = (("Syn", [r for r in syn_rows() if r["injection"]]), ("Nat", [r for r in nat_rows() if r["injection"]]))
+    lines = [r"\begin{tabular}{l" + "r" * (2 * len(conds)) + "}", r"\toprule",
+             r"& \multicolumn{5}{c}{Synthetic documents} & \multicolumn{5}{c}{Natural documents} \\",
+             r"\cmidrule(lr){2-6}\cmidrule(lr){7-11}",
+             r"Model & " + " & ".join(r"\shortstack{" + c.replace("T1M", "T1M") + "}" if False else lab for _ in range(2) for c, lab in conds) + r" \\",
+             r"\midrule"]
+    n_rows = 0
+    for mid, label, tag in ALL_MODELS:
+        cells, ok = [], False
+        for kind, rows in data:
+            rs = [r for r in rows if r["model"] == mid]
+            for c, _ in conds:
+                if rs and complete(rs, c):
+                    cells.append(f"{mean(float(r['complied']) for r in rs if r['cond'] == c):.2f}")
+                    ok = ok or c in ("T1Mreq", "T1Mcall")
+                else:
+                    cells.append("--")
+            if rs and complete(rs, "T1Mreq") and complete(rs, "T1Mcall"):
+                m(f"Loc{kind}Req{tag}", fmt_ci(paired(rs, "T1Mreq", "T1", SYN_KEY, "complied", SYN_CL), True))
+                m(f"Loc{kind}Call{tag}", fmt_ci(paired(rs, "T1Mcall", "T1", SYN_KEY, "complied", SYN_CL), True))
+                m(f"Loc{kind}CallReq{tag}", fmt_ci(paired(rs, "T1Mcall", "T1Mreq", SYN_KEY, "complied", SYN_CL), True))
+        if ok:
+            lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+            n_rows += 1
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("localization", lines)
+    m("LocNmodels", str(n_rows))
+
+
+def spotlight():
+    """Spotlighting (datamarking) under packs, synthetic documents."""
+    sp = [r for r in load("w9_*.jsonl") if r.get("spotlight") and r["injection"]]
+    plain = [r for r in syn_rows() if r["injection"]]
+    lines = [r"\begin{tabular}{lrrrrrr}", r"\toprule",
+             r"& \multicolumn{3}{c}{Plain documents} & \multicolumn{3}{c}{Spotlighting (datamarked)} \\",
+             r"\cmidrule(lr){2-4}\cmidrule(lr){5-7}",
+             r"Model & T1 & T3 & $\Delta$ & T1 & T3 & $\Delta$ \\", r"\midrule"]
+    n = 0
+    for mid, label, tag in ALL_MODELS:
+        s_ = [r for r in sp if r["model"] == mid]
+        if not s_ or not complete(s_, "T3"):
+            continue
+        cells = []
+        for rows, kind in ((plain, "Plain"), (s_, "Spot")):
+            rs = [r for r in rows if r["model"] == mid]
+            d = fmt_ci(paired(rs, "T3", "T1", SYN_KEY, "complied", SYN_CL), True)
+            cells += [f"{mean(float(r['complied']) for r in rs if r['cond'] == c):.2f}" for c in ("T1", "T3")] + [d]
+            m(f"{kind}D{tag}", d)
+            m(f"{kind}Tone{tag}", cells[-3])
+            m(f"{kind}Tthree{tag}", cells[-2])
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+        n += 1
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("spotlight", lines)
+    m("SpotNmodels", str(n))
+
+
+def pertype_all():
+    """Compliance per injection type, T1 -> T3, every model (main text)."""
+    syn = [r for r in syn_rows() if r["injection"]]
+    nat = [r for r in nat_rows() if r["injection"]]
+    cols = [(syn, "override"), (syn, "append"), (syn, "refuse"), (nat, "override"), (nat, "append")]
+    lines = [r"\begin{tabular}{lccccc}", r"\toprule",
+             r"& \multicolumn{3}{c}{Synthetic} & \multicolumn{2}{c}{Natural} \\",
+             r"\cmidrule(lr){2-4}\cmidrule(lr){5-6}",
+             r"Model & override & append & refuse & override & append \\", r"\midrule"]
+    for mid, label, tag in ALL_MODELS:
+        cells = []
+        for rows, kind in cols:
+            rs = [r for r in rows if r["model"] == mid and r["injection"] == kind]
+            if rs and complete(rs, "T3"):
+                a_, b_ = (mean(float(r["complied"]) for r in rs if r["cond"] == c) for c in ("T1", "T3"))
+                cells.append(f"{a_:.2f} $\\rightarrow$ {b_:.2f}")
+                src = "Syn" if rows is syn else "Nat"
+                m(f"Type{src}{kind.title()}{tag}", f"{a_:.2f} $\\rightarrow$ {b_:.2f}")
+            else:
+                cells.append("--")
+        if any(c != "--" for c in cells):
+            lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("pertype_all", lines)
+
+
+def cost():
+    """Median post-selection TTFT and measured recompute fraction per condition (synthetic)."""
+    syn = syn_rows()
+    conds = ["T1", "T3", "T3B15", "T3B30", "T3B50"]
+    lines = [r"\begin{tabular}{l" + "r" * len(conds) + "}", r"\toprule",
+             r"Model & T1 (prefill) & T3 (pack) & T3B15 & T3B30 & T3B50 \\", r"\midrule"]
+    for mid, label, tag in ALL_MODELS:
+        rs = [r for r in syn if r["model"] == mid]
+        if not rs or not complete(rs, "T3B50"):
+            continue
+        cells = []
+        for c in conds:
+            sel = [r for r in rs if r["cond"] == c]
+            if not complete(rs, c):
+                cells.append("--")
+                continue
+            t = median(r["ttft_s"] for r in sel)
+            fr = [r["recompute_fraction"] for r in sel if r.get("recompute_fraction") is not None]
+            cells.append(f"{t:.2f}\\,s" + (f" ({100 * mean(fr):.0f}\\%)" if fr else ""))
+            m(f"Ttft{c.replace('1', 'one').replace('3', 'three').replace('5', 'five').replace('0', 'zero')}{tag}", f"{t:.2f}")
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("cost", lines)
+    docs = load("w5_*.jsonl") + load("w7_*.jsonl") + load("w8_*.jsonl") + load("w9_*.jsonl") + load("w10_*.jsonl")
+    m("DocTrunc", str(sum(r["gen_tokens"] >= 160 for r in docs)))
+    m("DocNgen", f"{len(docs):,}".replace(",", "{,}"))
+    fr = [r["recompute_fraction"] for r in syn if r["cond"] == "T3B15" and r.get("recompute_fraction") is not None]
+    m("FracBfifteen", f"{100 * mean(fr):.0f}")
+    fr = [r["recompute_fraction"] for r in syn if r["cond"] == "T3B50" and r.get("recompute_fraction") is not None]
+    m("FracBfifty", f"{100 * mean(fr):.0f}")
+
+
+def template():
+    """Robustness: T1 vs T3 with prompts rendered by each tokenizer's official chat template."""
+    rows = load("tpl_*.jsonl")
+    lines = [r"\begin{tabular}{lrrrr}", r"\toprule",
+             r"& \multicolumn{2}{c}{Synthetic: $\Delta$ T3$-$T1} & \multicolumn{2}{c}{Natural: $\Delta$ T3$-$T1} \\",
+             r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}",
+             r"Model & hand-assembled & official template & hand-assembled & official template \\", r"\midrule"]
+    syn = [r for r in syn_rows() if r["injection"]]
+    nat = [r for r in nat_rows() if r["injection"]]
+    n = 0
+    for mid, label, tag in ALL_MODELS:
+        t = [r for r in rows if r["model"] == mid and r["injection"]]
+        if not t or not complete(t, "T3"):
+            continue
+        cells = []
+        for src, ref in (("s", syn), ("nat", nat)):
+            ts = [r for r in t if r["tag"].startswith(src)]
+            # the template run uses one sampling seed; compare to seed 0 of the main runs
+            hs = [r for r in ref if r["model"] == mid and r["seed"] == 0]
+            for rows_, name in ((hs, "Hand"), (ts, "Tpl")):
+                d = fmt_ci(paired(rows_, "T3", "T1", SYN_KEY, "complied", SYN_CL), True)
+                cells.append(d)
+                m(f"Tpl{name}{'Nat' if src == 'nat' else 'Syn'}{tag}", d)
+        lines.append(f"{label} & " + " & ".join(cells) + r" \\")
+        n += 1
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    write_table("template", lines)
+    m("TplNmodels", str(n))
 
 
 def main():
@@ -763,6 +944,11 @@ def main():
     attention()
     mechanism_all()
     primary()
+    localization()
+    spotlight()
+    pertype_all()
+    cost()
+    template()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))
