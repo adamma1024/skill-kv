@@ -520,8 +520,9 @@ material for the user. A document encoded without it is obeyed far more often, e
 fetched it.
 
 Mask size does not explain this pattern. On Qwen the masks hide on average \SpanUserQwen\ tokens (user turn), \SpanQQwen\ (question
-text) and \SpanCallQwen\ (tool call); on Llama they hide \SpanUserLlama, \SpanQLlama\ and \SpanCallLlama. On most models the
-question-only mask hides nearly as many tokens as the user-turn mask, yet it reproduces much less of the effect.
+text) and \SpanCallQwen\ (tool call); on Llama they hide \SpanUserLlama, \SpanQLlama\ and \SpanCallLlama. The
+question-only mask hides about three-quarters as many tokens as the user-turn mask, yet on five of six models it reproduces much less
+of the effect.
 
 What in the user turn matters differs by model. On some, the question's content does most of the work. On others, the mere
 structure of a preceding user message---its role header and boundaries---is enough to keep the document subordinate.
