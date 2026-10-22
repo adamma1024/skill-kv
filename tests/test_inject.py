@@ -86,3 +86,17 @@ def test_spotlight_layout_mentions_datamarking():
     enc = lambda s: [ord(c) % 97 for c in s]  # noqa: E731
     L = doc_layout(enc, make_items(n_docs=2, seed=0)[:2], spotlight=True)
     assert "datamarked" in L.sys_lazy_text
+
+
+def test_question_span_covers_only_the_question():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    from run_w3 import question_span
+    from skillkv.chat import QWEN
+    enc = lambda s: list(s)  # noqa: E731  (one token per character)
+    lo, hi = question_span(enc, QWEN, "What is X?", 100)
+    turn = f"{QWEN.user_open}What is X?{QWEN.end}{QWEN.assistant_open}"
+    assert "".join(turn[lo - 100: hi - 100]) == "What is X?"
+    with pytest.raises(ValueError):
+        question_span(lambda s: [s], QWEN, "What is X?", 0)  # whole-string tokens: no clean boundary

@@ -131,3 +131,20 @@ def test_pack_required_for_partial_selection(model):
     prefill(model, cache, SYS)
     with pytest.raises(ValueError, match="pack"):
         blend(model, cache, DOC, pack=None, select=[1, 2])
+
+
+def test_random_selection_with_full_layers_matches_deviation_compute(model):
+    """Compute-matched random control: two fully recomputed layers, then a random subset, so its
+    recompute fraction equals that of deviation selection at the same ratio."""
+    pack = build_pack(model, SYS + WRAP, DOC, model_id="t")
+    stats = {}
+    for name, sel in (("rand", ("random", 0.15, 3, 2)), ("dev", ("deviation", 0.15))):
+        c = make_prompt_cache(model)
+        prefill(model, c, SYS + TURN + WRAP)
+        stats[name] = blend(model, c, DOC, pack=pack, model_id="t", select=sel)
+    assert stats["rand"]["full_layers"] == 2 and stats["rand"]["selected"] == 3
+    assert stats["rand"]["recompute_fraction"] == stats["dev"]["recompute_fraction"]
+    c = make_prompt_cache(model)
+    prefill(model, c, SYS + TURN + WRAP)
+    plain = blend(model, c, DOC, pack=pack, model_id="t", select=("random", 0.15, 3))
+    assert stats["rand"]["indices"] == plain["indices"]

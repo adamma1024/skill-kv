@@ -35,12 +35,23 @@ CONDS = {"T1": ("C1", None), "T2": ("C2", "c2"), "T3": ("C3", "sys"), "T3G": ("C
 BLEND = {"T3F16": lambda n, i: list(range(min(16, n))),           # recompute first 16 doc tokens
          "T3L16": lambda n, i: list(range(max(0, n - 16), n)),     # recompute last 16
          "T3R15": lambda n, i: ("random", 0.15, i),                # random 15%
+         "T3R15F": lambda n, i: ("random", 0.15, i, 2),           # random 15% + 2 full layers (compute-matched to T3B15)
          "T3B15": lambda n, i: ("deviation", 0.15),                # CacheBlend-style 15%
          "T3B30": lambda n, i: ("deviation", 0.30),                # recompute-ratio sweep
          "T3B50": lambda n, i: ("deviation", 0.50),
          "T1M": None,                                               # text, no attention to the turn
          "T1Mreq": None,   # text; document may attend to the user request but not to the tool call
-         "T1Mcall": None}  # text; document may attend to the tool call but not to the user request
+         "T1Mcall": None,  # text; document may attend to the tool call but not to the user request
+         "T1Mq": None}     # text; only the question text is masked (role headers and tool call visible)
+
+
+def question_span(enc, fmt, question: str, start: int) -> tuple[int, int]:
+    """Absolute token range of the question text inside the user turn, excluding the role header
+    and the end/assistant markers. Fails if tokenization does not split at those boundaries."""
+    head, q, tail = enc(fmt.user_open), enc(question), enc(fmt.end + fmt.assistant_open)
+    if head + q + tail != enc(f"{fmt.user_open}{question}{fmt.end}{fmt.assistant_open}"):
+        raise ValueError("user turn does not tokenize as [header][question][end]; cannot mask the question alone")
+    return start + len(head), start + len(head) + len(q)
 
 
 def main() -> None:
@@ -118,7 +129,8 @@ def main() -> None:
                             n_req = len(L.user_turn(it.question))
                             excl = {"T1M": (n_lazy, n_lazy + len(turn)),
                                     "T1Mreq": (n_lazy + n_req, n_lazy + len(turn)),
-                                    "T1Mcall": (n_lazy, n_lazy + n_req)}[cond]
+                                    "T1Mcall": (n_lazy, n_lazy + n_req),
+                                    "T1Mq": question_span(enc, fmt, it.question, n_lazy)}[cond]
                             stats = blend(model, cache, L.wrap + doc_ids, select="all", exclude=excl)
                         else:
                             prefill(model, cache, turn + L.wrap)

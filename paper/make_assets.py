@@ -26,7 +26,8 @@ OUT = ROOT / "paper"
 MODELS = [("Qwen/Qwen3-4B", "Qwen3-4B", "Four"), ("Qwen/Qwen3-8B", "Qwen3-8B", "Eight"),
           ("mlx-community/Llama-3.2-3B-Instruct", "Llama-3.2-3B", "Llama")]
 # categorical slots of the validated reference palette (light), fixed order and fixed meaning
-C = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
+C = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+MARKERS = ["o", "s", "^", "D", "v", "P", "X"]
 INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e6e5e0"
 macros: dict[str, str] = {}
 
@@ -419,17 +420,25 @@ def scale_natural():
     write_table("scale", lines)
 
     # natural-document accuracy cost (clean items)
-    lines = [r"\begin{tabular}{lrrrr}", r"\toprule", r"Model & T1 & T1$'$ & T3 & T3B15 \\", r"\midrule"]
+    lines = [r"\begin{tabular}{lrrrrr}", r"\toprule", r"Model & T1 & T1$'$ & T3 & T3B15 & $\Delta$ T3$-$T1 \\", r"\midrule"]
+    n_drop = n_acc = 0
     for mid, label, tag in ALL_MODELS:
         rs = [r for r in nat if r["model"] == mid and not r["injection"]]
         if not rs or not complete(rs, "T3"):
             continue
         cells = [(f"{rate(rs, c, 'correct'):.2f}" if complete(rs, c) else "--") for c in ("T1", "T1M", "T3", "T3B15")]
+        d = paired(rs, "T3", "T1", key, "correct", cl)
+        cells.append(fmt_ci(d, True))
+        m(f"NatAccD{tag}", fmt_ci(d, True))
+        n_acc += 1
+        n_drop += ci(d)[2] < 0
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
         m(f"NatAccTone{tag}", f"{rate(rs, 'T1', 'correct'):.2f}")
         m(f"NatAccTthree{tag}", f"{rate(rs, 'T3', 'correct'):.2f}")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("natural_accuracy", lines)
+    m("NatAccNdrop", str(n_drop))
+    m("NatAccNmodels", str(n_acc))
     m("NatNdocs", str(len({r["doc"] for r in nat})))
     m("NatNinjected", str(len({(r["tag"], r["item"]) for r in nat if r["injection"]
                                 and r["model"] == MODELS[0][0]})))
@@ -460,7 +469,8 @@ def scale_natural():
             cells.append(f"{num(v, True)} [{num(lo)}, {num(hi)}]")
             m(f"Sweep{'Bzero' if c == 'T3' else c.replace('T3B', 'B').replace('15', 'fifteen').replace('30', 'thirty').replace('50', 'fifty')}{tag}", cells[-1])
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
-        ax.errorbar(xs, ys, yerr=[los, his], color=C[j % 4], marker="o", markersize=3.5, linewidth=1.5,
+        k = [t for _, _, t in ALL_MODELS].index(tag)  # colour and marker follow the model, not its rank
+        ax.errorbar(xs, ys, yerr=[los, his], color=C[k], marker=MARKERS[k], markersize=3.5, linewidth=1.5,
                     elinewidth=0.6, capsize=1.5, label=label)
         j += 1
     lines += [r"\bottomrule", r"\end{tabular}"]
@@ -549,7 +559,11 @@ def injecagent():
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("injecagent", lines)
     all_inj = [r for r in rows if r["variant"] == "injected"]
-    m("IaTruncMax", f"{100 * max(mean(r['truncated'] for r in all_inj if r['model'] == mid and r['cond'] == c) for mid in {r['model'] for r in all_inj} for c in ('T1', 'T3')):.1f}")
+    m("IaTruncMaxMain", f"{100 * max(mean(r['truncated'] for r in all_inj if r['model'] == mid and r['cond'] == c) for mid in {r['model'] for r in all_inj} for c in ('T1', 'T3')):.1f}")
+    cells = defaultdict(list)
+    for r in rows:
+        cells[r["model"], r["variant"], r["cond"]].append(r["truncated"])
+    m("IaTruncMax", f"{100 * max(mean(v) for v in cells.values()):.1f}")
     m("IaNcases", str(len(cases)))
     m("IaNattacks", str(len({c.attacker_instruction for c in cases.values()})))
     m("IaNusers", str(len({c.user_instruction for c in cases.values()})))
@@ -757,8 +771,12 @@ def mechanism_all():
         cells = []
         for name, rows, a, b, k, c in cols:
             rs = [r for r in rows if r["model"] == mid]
-            cells.append(fmt_ci(paired(rs, a, b, k, "complied", c), signed=True)
-                         if complete(rs, a) and complete(rs, b) else "--")
+            if not (complete(rs, a) and complete(rs, b)):
+                cells.append("--")
+            elif name == "InjecAgent":
+                cells.append(fmt_ci2(rs, a, b))
+            else:
+                cells.append(fmt_ci(paired(rs, a, b, k, "complied", c), signed=True))
         lines.append(f"{label} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("mechanism_all", lines)
@@ -780,42 +798,36 @@ def dedup(rows):
 
 def syn_rows():
     return dedup([r for r in load("w5_*.jsonl") + load("w8_*.jsonl") + load("w10_*_s*_n12.jsonl")
+                  + load("w11_*_s*_n12.jsonl") + load("w12_*_s*_n12.jsonl")
                   if not r["defended"] and not r.get("spotlight", False)])
 
 
 def nat_rows():
-    return dedup(load("w7_*.jsonl") + load("w10_*_nat0.jsonl"))
+    return dedup(load("w7_*.jsonl") + load("w10_*_nat0.jsonl") + load("w11_*_nat0.jsonl"))
 
 
 def localization():
-    """Partial-mask ablation: which conversation edge does the document need to see?"""
-    conds = [("T1", "T1"), ("T1Mreq", "sees request only"), ("T1Mcall", "sees call only"), ("T1M", "T1$'$ (neither)"), ("T3", "T3")]
-    data = (("Syn", [r for r in syn_rows() if r["injection"]]), ("Nat", [r for r in nat_rows() if r["injection"]]))
-    lines = [r"\begin{tabular}{l" + "r" * (2 * len(conds)) + "}", r"\toprule",
-             r"& \multicolumn{5}{c}{Synthetic documents} & \multicolumn{5}{c}{Natural documents} \\",
-             r"\cmidrule(lr){2-6}\cmidrule(lr){7-11}",
-             r"Model & " + " & ".join(r"\shortstack{" + c.replace("T1M", "T1M") + "}" if False else lab for _ in range(2) for c, lab in conds) + r" \\",
-             r"\midrule"]
+    """Partial-mask ablation: which conversation edge does the document need to see? One table per source."""
+    conds = [("T1", "T1"), ("T1Mreq", "call masked"), ("T1Mq", "question masked"), ("T1Mcall", "request masked"),
+             ("T1M", "T1$'$ (both)"), ("T3", "T3 (pack)")]
     n_rows = 0
-    for mid, label, tag in ALL_MODELS:
-        cells, ok = [], False
-        for kind, rows in data:
+    for kind, rows in (("Syn", [r for r in syn_rows() if r["injection"]]), ("Nat", [r for r in nat_rows() if r["injection"]])):
+        lines = [r"\begin{tabular}{l" + "r" * len(conds) + "}", r"\toprule",
+                 r"Model & " + " & ".join(lab for _, lab in conds) + r" \\", r"\midrule"]
+        for mid, label, tag in ALL_MODELS:
             rs = [r for r in rows if r["model"] == mid]
-            for c, _ in conds:
-                if rs and complete(rs, c):
-                    cells.append(f"{mean(float(r['complied']) for r in rs if r['cond'] == c):.2f}")
-                    ok = ok or c in ("T1Mreq", "T1Mcall")
-                else:
-                    cells.append("--")
-            if rs and complete(rs, "T1Mreq") and complete(rs, "T1Mcall"):
-                m(f"Loc{kind}Req{tag}", fmt_ci(paired(rs, "T1Mreq", "T1", SYN_KEY, "complied", SYN_CL), True))
-                m(f"Loc{kind}Call{tag}", fmt_ci(paired(rs, "T1Mcall", "T1", SYN_KEY, "complied", SYN_CL), True))
-                m(f"Loc{kind}CallReq{tag}", fmt_ci(paired(rs, "T1Mcall", "T1Mreq", SYN_KEY, "complied", SYN_CL), True))
-        if ok:
+            if not (rs and complete(rs, "T1Mreq") and complete(rs, "T1Mcall")):
+                continue
+            cells = [f"{mean(float(r['complied']) for r in rs if r['cond'] == c):.2f}" if complete(rs, c) else "--"
+                     for c, _ in conds]
             lines.append(f"{label} & " + " & ".join(cells) + r" \\")
-            n_rows += 1
-    lines += [r"\bottomrule", r"\end{tabular}"]
-    write_table("localization", lines)
+            n_rows += kind == "Syn"
+            for c, name in (("T1Mreq", "Req"), ("T1Mcall", "Call"), ("T1Mq", "Q")):
+                if complete(rs, c):
+                    m(f"Loc{kind}{name}{tag}", fmt_ci(paired(rs, c, "T1", SYN_KEY, "complied", SYN_CL), True))
+            m(f"Loc{kind}CallReq{tag}", fmt_ci(paired(rs, "T1Mcall", "T1Mreq", SYN_KEY, "complied", SYN_CL), True))
+        lines += [r"\bottomrule", r"\end{tabular}"]
+        write_table(f"localization_{kind.lower()}", lines)
     m("LocNmodels", str(n_rows))
 
 
@@ -908,6 +920,8 @@ def cost():
 def template():
     """Robustness: T1 vs T3 with prompts rendered by each tokenizer's official chat template."""
     rows = load("tpl_*.jsonl")
+    from skillkv.inject import make_items, make_natural_items
+    n_items = len(make_items(12, 0)) + len(make_items(12, 1)) + len(make_natural_items(ROOT / "data" / "natural_docs.json"))
     lines = [r"\begin{tabular}{lrrrr}", r"\toprule",
              r"& \multicolumn{2}{c}{Synthetic: $\Delta$ T3$-$T1} & \multicolumn{2}{c}{Natural: $\Delta$ T3$-$T1} \\",
              r"\cmidrule(lr){2-3}\cmidrule(lr){4-5}",
@@ -916,9 +930,10 @@ def template():
     nat = [r for r in nat_rows() if r["injection"]]
     n = 0
     for mid, label, tag in ALL_MODELS:
-        t = [r for r in rows if r["model"] == mid and r["injection"]]
-        if not t or not complete(t, "T3"):
+        # a template run is reported only once every item of all three sets has both conditions
+        if sum(r["model"] == mid for r in rows) != 2 * n_items:
             continue
+        t = [r for r in rows if r["model"] == mid and r["injection"]]
         cells = []
         for src, ref in (("s", syn), ("nat", nat)):
             ts = [r for r in t if r["tag"].startswith(src)]
@@ -933,6 +948,24 @@ def template():
     lines += [r"\bottomrule", r"\end{tabular}"]
     write_table("template", lines)
     m("TplNmodels", str(n))
+
+
+def glmm():
+    """Sensitivity check for InjecAgent: crossed random-effects logistic model (attack, user case and
+    case intercepts; variational Bayes), T3 vs T1 on injected cases."""
+    import pandas as pd
+    from statsmodels.genmod.bayes_mixed_glm import BinomialBayesMixedGLM
+    rows, _ = ia_rows()
+    for mid, label, tag in ALL_MODELS:
+        rs = [r for r in rows if r["model"] == mid and r["variant"] == "injected" and r["cond"] in ("T1", "T3")]
+        if not rs:
+            continue
+        d = pd.DataFrame([{"y": int(r["attack_success"]), "t3": int(r["cond"] == "T3"), "attack": r["attack"], "user": r["user"],
+                           "case": f"{r['kind']}{r['index']}"} for r in rs])
+        fit = BinomialBayesMixedGLM.from_formula(
+            "y ~ t3", {"attack": "0 + C(attack)", "user": "0 + C(user)", "case": "0 + C(case)"}, d).fit_vb()
+        b, sd = fit.fe_mean[1], fit.fe_sd[1]
+        m(f"Glmm{tag}", f"{num(b, True)} ({sd:.2f})")
 
 
 def main():
@@ -953,6 +986,7 @@ def main():
     pertype_all()
     cost()
     template()
+    glmm()
     (OUT / "numbers.tex").write_text(
         "% generated by paper/make_assets.py - do not edit\n"
         + "".join(f"\\newcommand{{\\{k}}}{{{v}}}\n" for k, v in sorted(macros.items())))

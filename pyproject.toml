@@ -12,6 +12,7 @@ data = [
 dev = ["pytest>=8"]
 paper = [
     "matplotlib>=3.11.2",
+    "statsmodels>=0.15.0",
 ]
 
 [build-system]

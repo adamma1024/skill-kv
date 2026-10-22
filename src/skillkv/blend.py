@@ -64,6 +64,8 @@ def blend(model, cache, segment: list[int], pack: Pack | None = None, model_id: 
         fixed = sorted(select)
     elif select[0] == "random":
         fixed = sorted(random.Random(select[2]).sample(range(n), math.ceil(select[1] * n)))
+        if len(select) > 3:  # ("random", r, seed, full_layers): compute-matched to deviation selection
+            full_layers = min(select[3], L)
     elif select[0] == "deviation":
         full_layers = min(2, L)
     else:
@@ -108,6 +110,9 @@ def blend(model, cache, segment: list[int], pack: Pack | None = None, model_id: 
         else:
             kseg, vseg = kd, vd
         cache[l].update_and_fetch(kseg, vseg)
+        if isinstance(select, tuple) and select[0] == "random" and full_layers and l == full_layers - 1:
+            act = fixed
+            h = h[:, mx.array(act), :] if act else h[:, :0, :]
         if select != "all" and isinstance(select, tuple) and select[0] == "deviation" and l == full_layers - 1:
             dev = (mx.sum((kseg - kd).astype(mx.float32) ** 2, axis=(0, 1, 3))
                    + mx.sum((vseg - vd).astype(mx.float32) ** 2, axis=(0, 1, 3)))
