@@ -439,7 +439,7 @@ CacheBlend-style recompute at \FracBfifteen\% of prefill compute.}
 \begin{itemize}
 \item Qwen3-8B, Qwen3-14B, Qwen3-32B and Llama-3.1-8B rise by \IaDEight, \IaDFourteen, \IaDThirtyTwo\ and \IaDLlamaEight.
 \item On Qwen3-14B both case types rise: direct harm \IaDHFourteen\ and data stealing \IaDSFourteen.
-\item Qwen3-4B rises by \IaDFour; its CI includes zero.
+\item Qwen3-4B rises by \IaDFour; the increase does not survive Holm correction (Table~\ref{tab:primary}).
 \item Llama-3.2-3B almost never calls the attacker tool in either condition, a floor.
 \end{itemize}
 With the injection removed, attacker tools are essentially never called, so the increase is caused by the injection. The
@@ -448,8 +448,8 @@ tool call falls from \IaNoToolToneFourteen\ to \IaNoToolTthreeFourteen.
 
 A crossed random-effects logistic model (intercepts for attack, user case and case; variational Bayes) gives the same signs. Its
 log-odds ratios for \cond{T3} vs \cond{T1} range from \GlmmFour\ on Qwen3-4B to \GlmmLlamaEight\ on Llama-3.1-8B (posterior sd in
-parentheses); on Llama-3.2-3B it is \GlmmLlama. The model treats the Qwen3-4B increase as credible, whereas our more conservative
-permutation test does not. Variational posteriors understate uncertainty, so we keep the permutation test as primary.
+parentheses); on Llama-3.2-3B it is \GlmmLlama. The model treats the Qwen3-4B increase as credible; our more conservative permutation test
+gives an uncorrected $p$ below 0.05 for it, but not after Holm correction. Variational posteriors understate uncertainty, so we keep the permutation test as primary.
 
 \textbf{Defenses at the prompt level.} Two defenses leave the increase in place:
 \begin{itemize}

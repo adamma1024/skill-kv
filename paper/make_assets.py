@@ -521,7 +521,8 @@ def ia_rows():
     seeds = {s for s in {r["seed"] for r in rows} if all(count[mid, s] == n_full for mid in models)}
     rows = [r for r in rows if r["seed"] in seeds]
     m("IaNseeds", {1: "one", 2: "two", 3: "three"}[len(seeds)])
-    m("IaNseedsText", "one sampled response" if len(seeds) == 1 else f"{len(seeds)} sampled responses")
+    words = {1: "one", 2: "two", 3: "three", 4: "four"}
+    m("IaNseedsText", "one sampled response" if len(seeds) == 1 else f"{words[len(seeds)]} sampled responses (seeds)")
     for r in rows:
         c = cases[r["kind"], r["index"]]
         r["attack"], r["user"], r["complied"] = c.attacker_instruction, c.user_instruction, r["attack_success"]
