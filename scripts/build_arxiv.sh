@@ -14,7 +14,7 @@ for f in $(grep -o 'figures/[A-Za-z0-9_]*\.pdf' main.tex | sort -u); do cp "$f" 
 ( cd arxiv && tectonic -X compile --keep-intermediates main.tex >/dev/null )
 ( cd arxiv && rm -f main.aux main.log main.out main.blg )  # ship main.bbl (arXiv reads it) and refs.bib
 grep -q 'bibitem' arxiv/main.bbl || { echo "main.bbl has no entries" >&2; exit 1; }
-( cd arxiv && tar czf ../arxiv.tar.gz --exclude main.pdf --exclude '*.aux' --exclude '*.log' --exclude '*.out' . )
+( cd arxiv && COPYFILE_DISABLE=1 tar czf ../arxiv.tar.gz --exclude main.pdf --exclude '*.aux' --exclude '*.log' --exclude '*.out' . )
 # the arXiv form's abstract must match the PDF: regenerate it from the LaTeX source
 uv run python ../scripts/arxiv_abstract.py main.tex > arxiv/abstract.txt
 python3 - <<'PY'
