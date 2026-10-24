@@ -13,3 +13,6 @@ paper/*.out
 paper/arxiv/
 paper/arxiv.tar.gz
 paper/*.pdf.tmp
+paper/supplement.zip
+paper/tmlr_submission.md
+.anon-identifiers
